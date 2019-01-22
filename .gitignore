@@ -2,3 +2,7 @@
 .ipynb_checkpoints/*
 events_data/*
 *.png
+.#*
+Counting_Your_Customers.pdf
+*.html
+trees/*

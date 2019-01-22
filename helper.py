@@ -2,15 +2,23 @@ import pandas as pd
 import numpy as np
 import matplotlib.pylab as plt
 import pandas as pd
+import os
 
 from pyspark.sql import SparkSession, udf
 from pyspark.sql.functions import to_timestamp, datediff
 from pyspark.sql.types import IntegerType, FloatType, DoubleType, BooleanType
 
 
-def get_merged_data():
+def write_tree_to_file(tree, filename):
+    fullfile = os.path.join("trees", filename, ".txt")
+    text_file = open(fullfile, "w")
+    text_file.write(rfModel.toDebugString)
+    text_file.close()
+    print('Saved to fullfile')
+
+def get_merged_data(appName='gh-churn'):
     
-    spark = SparkSession.builder.appName('gh-churn').getOrCreate()
+    spark = SparkSession.builder.appName(appName).getOrCreate()
     first_period = spark.read.csv('events_data/events_2016_01_01_2016_06_01.csv', 
                                   header = True, inferSchema = True)    
     second_period = spark.read.csv('events_data/events_2016_06_02_2016_11_01_01.csv', 
@@ -60,7 +68,7 @@ def get_merged_data():
                    'PullRequestEvent_count', 'PullRequestReviewCommentEvent_count',
                    'PushEvent_count', 'ReleaseEvent_count', 'WatchEvent_count')
     
-    return churn_data.toPandas()
+    return churn_data
 
 
 def get_user_info(gh, user):

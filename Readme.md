@@ -96,3 +96,11 @@ csvstack user_batch_* > all_users.csv
 ```
 for old in *; do mv $old `basename $old `.csv; done;
 ```
+
+
+## Visualize Random Trees
+
+```
+pip install eurekatrees
+```
+eurekatrees --trees ./trees/rf_tree.txt 
