@@ -9,10 +9,16 @@ from pyspark.ml.classification import LogisticRegressionModel
 from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.linalg import SparseVector
 
+from github3 import login
 from lifetimes import BetaGeoFitter
 import json
 
+import helper as h
 
+from google.cloud import bigquery
+client = bigquery.Client()
+
+gh = login('bps10', password='boniver#3')
 spark = SparkSession.builder.appName('App').getOrCreate()
 testM = LogisticRegressionModel.load("lrModel")
 print('-----Model loaded-----')
@@ -65,36 +71,64 @@ def index():
 def data_page():
   username = request.form['username']
 
-  data = spark.read.json('data.json')
-  stay_or_go, probability = predict(data)
+  user_profile = h.get_user_info(gh, username)
+  user_profile_df = pd.DataFrame(user_profile, index=[0])
+
+  event_data = h.get_user_events(username, bigquery, client)
+  usr_data = user_profile_df.join(event_data)
+  usr_data['second_period_event_count'] = [0]
+  usr_data = usr_data.fillna(0)
+  print(usr_data)
+  print(usr_data.transpose())
+
+  spark_user = spark.createDataFrame(usr_data)
+  spark_user = spark_user.drop('bio')
+  spark_user = h.convert_bigint_to_int(spark_user)
+
+  #data = spark.read.json('data.json')
+  stay_or_go, probability = predict(spark_user)
   print([username, stay_or_go, probability])
 
   # add one follower and rerun model
-  new_data = data.withColumn(
-    'followers_count', data['followers_count'] + 1)
+  new_data = spark_user.withColumn(
+    'followers_count', spark_user['followers_count'] + 1)
   stay_or_go1, probability1 = predict(new_data)
 
   # add one follower and rerun model
-  new_data = data.withColumn(
-    'WatchEvent_count', data['WatchEvent_count'] + 1)
+  new_data = spark_user.withColumn(
+    'WatchEvent_count', spark_user['WatchEvent_count'] + 1)
   stay_or_go2, probability2 = predict(new_data)
   print(probability2)
 
   # add one follower and rerun model
-  new_data = data.withColumn(
-    'blog', data['blog'] + 1)
+  new_data = spark_user.withColumn(
+    'blog', spark_user['blog'] + 1)
   stay_or_go3, probability3 = predict(new_data)
   print(probability3)
+
+  new_data = spark_user.withColumn(
+    'blog', spark_user['blog'] + 1)
+  new_data = new_data.withColumn(
+    'WatchEvent_count', new_data['WatchEvent_count'] + 1)
+  new_data = new_data.withColumn(
+    'followers_count', new_data['followers_count'] + 1)
+
+  stay_or_go4, probability4 = predict(new_data)
+  print('All three {0}'.format(probability4))
 
   print(CLV_model.fit([19], [50], [100]))
 
   return render_template('index.html',
                          stay_or_go=stay_or_go,
                          name=username,
+                         followers_count=user_profile['followers_count'],
+                         following_count=user_profile['following_count'],
                          probability=probability,
                          addUserProb=probability1,
                          addWatchProb=probability2,
-                         addBlog=probability3)
+                         addBlog=probability3,
+                         addAllThree=probability4)
+
 
 def predict(data):
   data = data.withColumn("second_period_event_count",                                   data.second_period_event_count.cast(DoubleType()))

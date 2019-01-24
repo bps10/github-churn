@@ -9,6 +9,11 @@ from pyspark.sql.functions import to_timestamp, datediff
 from pyspark.sql.types import IntegerType, FloatType, DoubleType, BooleanType
 
 
+## feature scaling
+def feature_scaling(df):
+    pass
+
+
 def eval_metrics(predictions):
     predictions = predictions.toPandas()
     TP = np.sum((predictions.label == 1) & (predictions.prediction == 1))
@@ -116,11 +121,12 @@ def get_merged_data(appName='gh-churn', year='2016'):
                    'PullRequestEvent_count', 'PullRequestReviewCommentEvent_count',
                    'PushEvent_count', 'ReleaseEvent_count', 'WatchEvent_count')
     
-    # remove outliers with very high number of Events in early 2016.
+    # remove outliers with very high number of Events.
     n_event_threshold = 200 if year == '2016' else 600
     n_total_users = churn_data.count()
     churn_data = churn_data.filter(churn_data.frequency < n_event_threshold)
-    n_users = churn_data.count()
+    churn_data = churn_data.filter(churn_data.second_period_event_count < n_event_threshold)
+    n_users = churn_data.count()    
     print('% of users dropped {0}'.format(100 - (n_users / n_total_users * 100)))
     
     return churn_data
@@ -177,25 +183,53 @@ def get_batch(gh, df, random_indexes, start_index, existing_users=set(),
 
 
 
+def get_user_events(user, bigquery, client):
+    job_config = bigquery.QueryJobConfig()
+    job_config.use_legacy_sql = True
 
-# curl -u "bps10" -i https://api.github.com/users?page=50&per_page=100
-def get_user_info_(user):
-    '''Depreciated.
-    '''
-    buffer = BytesIO()
-    c = pycurl.Curl()
-    c.setopt(c.URL, 'https://api.github.com/users/{0}'.format(user))
-    c.setopt(c.WRITEDATA, buffer)
-    c.perform()
-    c.close()
+    query = (
+    """SELECT  
+      COUNT(type) as event_count, 
+      MAX(created_at) as last_event, 
+      MIN(created_at) as first_event,
+      SUM(CASE WHEN type = 'CommitCommentEvent' then 1 else 0 end) as CommitCommentEvent_count,
+      SUM(CASE WHEN type = 'CreateEvent' then 1 else 0 end) as CreateEvent_count,
+      SUM(CASE WHEN type = 'DeleteEvent' then 1 else 0 end) as DeleteEvent_count,
+      SUM(CASE WHEN type = 'ForkEvent' then 1 else 0 end) as ForkEvent_count,
+      SUM(CASE WHEN type = 'GollumEvent' then 1 else 0 end) as GollumEvent_count,
+      SUM(CASE WHEN type = 'IssueCommentEvent' then 1 else 0 end) as IssueCommentEvent_count,
+      SUM(CASE WHEN type = 'IssuesEvent' then 1 else 0 end) as IssuesEvent_count,
+      SUM(CASE WHEN type = 'MemberEvent' then 1 else 0 end) as MemberEvent_count,
+      SUM(CASE WHEN type = 'PublicEvent' then 1 else 0 end) as PublicEvent_count,
+      SUM(CASE WHEN type = 'PullRequestEvent' then 1 else 0 end) as PullRequestEvent_count,
+      SUM(CASE WHEN type = 'PullRequestReviewCommentEvent' then 1 else 0 end) as PullRequestReviewCommentEvent_count,
+      SUM(CASE WHEN type = 'PushEvent' then 1 else 0 end) as PushEvent_count,
+      SUM(CASE WHEN type = 'ReleaseEvent' then 1 else 0 end) as ReleaseEvent_count,
+      SUM(CASE WHEN type = 'WatchEvent' then 1 else 0 end) as WatchEvent_count,
 
-    body = buffer.getvalue()
-    # Body is a byte string.
-    # We have to know the encoding in order to print it to a text file
-    # such as standard output.
-    body.decode('iso-8859-1')
+      FROM 
+      [githubarchive:year.2018]
+    WHERE (actor.login = '""" + user + """' AND public);
 
-    return dict(json.loads(d))
+    """
+
+    )
+    df = client.query(query, location="US", job_config=job_config).to_dataframe()
+    
+    return df
+
+
+def convert_bigint_to_int(df):
+    for col, t in df.dtypes:
+        if t == 'bigint':
+            df = df.withColumn(col, df[col].cast(IntegerType()))
+            
+    f_udf=udf.UserDefinedFunction(lambda x: 1 if x is not None else 0, IntegerType())
+    df = df.withColumn("blog", f_udf(df.blog))
+    df = df.withColumn("company", f_udf(df.company))
+    df = df.withColumn("hireable", f_udf(df.hireable))
+    
+    return df
 
 
 if __name__ == '__main__':
