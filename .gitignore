@@ -6,3 +6,10 @@ events_data/*
 Counting_Your_Customers.pdf
 *.html
 trees/*
+CLV.pkl
+data.json
+lrModel/data lrModel/metadata
+pipeline/metadata pipeline/stages
+web/app.py
+pipeline/*
+lrModel/*

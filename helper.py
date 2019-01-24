@@ -9,7 +9,24 @@ from pyspark.sql.functions import to_timestamp, datediff
 from pyspark.sql.types import IntegerType, FloatType, DoubleType, BooleanType
 
 
+def eval_metrics(predictions):
+    predictions = predictions.toPandas()
+    TP = np.sum((predictions.label == 1) & (predictions.prediction == 1))
+    FP = np.sum((predictions.label == 0) & (predictions.prediction == 1))
+    FN = np.sum((predictions.label == 1) & (predictions.prediction == 0))
+    TN = np.sum((predictions.label == 0) & (predictions.prediction == 0))
+    precision = TP / (TP + FP)
+    recall = TP / (TP + FN)
+    accuracy = (TP + TN) / (TP + FP + FN + TN)
+    f1score = 2 * (precision * recall) /  (precision + recall)
+    print('Precision: {0}'.format(np.round(precision, 3)))
+    print('Recall:    {0}'.format(np.round(recall, 3)))
+    print('Accuracy:  {0}'.format(np.round(accuracy, 3)))
+    print('F1-score:  {0}'.format(np.round(f1score, 4)))
+
+
 def add_time_columns(df, end_date='2016-06-01 23:59:59+00:00'):
+    
     df['created_at'] = pd.to_datetime(df.created_at, errors='coerce')
     df['last_event'] = pd.to_datetime(df.last_event, errors='coerce')
     df['first_event'] = pd.to_datetime(df.first_event, errors='coerce')
@@ -22,30 +39,45 @@ def add_time_columns(df, end_date='2016-06-01 23:59:59+00:00'):
 
 
 def write_tree_to_file(tree, filename):
-    fullfile = os.path.join("trees", filename, ".txt")
+    fullfile = os.path.join("trees", filename + ".txt")
     text_file = open(fullfile, "w")
-    text_file.write(rfModel.toDebugString)
+    text_file.write(tree)
     text_file.close()
     print('Saved to fullfile')
 
     
-def get_merged_data(appName='gh-churn'):
+def get_merged_data(appName='gh-churn', year='2016'):
     
     spark = SparkSession.builder.appName(appName).getOrCreate()
-    first_period = spark.read.csv('events_data/events_2016_01_01_2016_06_01.csv', 
+    first_period = spark.read.csv('events_data/events_' + year + '_01_01_' + year + '_06_01.csv', 
                                   header = True, inferSchema = True)    
-    second_period = spark.read.csv('events_data/events_2016_06_02_2016_11_01_01.csv', 
+    second_period = spark.read.csv('events_data/events_' + year + '_06_02_' + year + '_11_01.csv', 
                                    header = True, inferSchema = True)
     users = spark.read.csv('user_data/all_users.csv', header=True, inferSchema=True)
     users = users.drop('event_count').drop('last_event').drop('first_event').drop('_c0')
     
     churn_data = users.join(first_period, users['login'] == first_period['actor'], 
                             how='left')
+
+    keep_columns =  ['CommitCommentEvent_count', 'CreateEvent_count', 'DeleteEvent_count', 
+                   'ForkEvent_count', 'GollumEvent_count', 'IssueCommentEvent_count',
+                   'IssuesEvent_count', 'MemberEvent_count', 'PublicEvent_count', 
+                   'PullRequestEvent_count', 'PullRequestReviewCommentEvent_count',
+                   'PushEvent_count', 'ReleaseEvent_count', 'WatchEvent_count']
+    
+    second_period = second_period.withColumn('event_count', 
+                             sum(second_period[col] for col in second_period.columns if col in keep_columns))
+    
+    churn_data = churn_data.withColumn('frequency', 
+                             sum(churn_data[col] for col in churn_data.columns if col in keep_columns))
+    
     second_period_event_count = second_period.selectExpr(
         "actor as login", "event_count as second_period_event_count")
     
     churn_data = churn_data.join(second_period_event_count,
                                  on='login', how='left')
+    churn_data = churn_data.fillna(0, subset='second_period_event_count')
+
     '''
     churn_data = churn_data.withColumn("first_event", to_timestamp(churn_data.first_event))
     churn_data = churn_data.withColumn("last_event", to_timestamp(churn_data.last_event))
@@ -56,20 +88,21 @@ def get_merged_data(appName='gh-churn'):
                                    datediff(churn_data.last_event, churn_data.first_event))
     '''
     
-    churn_data = churn_data.withColumn("public_repos_count", churn_data.public_repos_count.cast(IntegerType()))
-    churn_data = churn_data.withColumn("public_gists_count", churn_data.public_gists_count.cast(IntegerType()))
-    churn_data = churn_data.withColumn("followers_count", churn_data.followers_count.cast(IntegerType()))
-    churn_data = churn_data.withColumn("following_count", churn_data.following_count.cast(IntegerType()))
-
-    churn_data = churn_data.fillna(0, subset='second_period_event_count')
+    churn_data = churn_data.withColumn("public_repos_count",
+                                       churn_data.public_repos_count.cast(IntegerType()))
+    churn_data = churn_data.withColumn("public_gists_count", 
+                                       churn_data.public_gists_count.cast(IntegerType()))
+    churn_data = churn_data.withColumn("followers_count", 
+                                       churn_data.followers_count.cast(IntegerType()))
+    churn_data = churn_data.withColumn("following_count", 
+                                       churn_data.following_count.cast(IntegerType()))
     
     f_udf=udf.UserDefinedFunction(lambda x: 1 if x is not None else 0, IntegerType())
 
     churn_data = churn_data.withColumn("blog", f_udf(churn_data.blog))
     churn_data = churn_data.withColumn("company", f_udf(churn_data.company))
     churn_data = churn_data.withColumn("hireable", f_udf(churn_data.hireable))
-    
-    churn_data = churn_data.withColumnRenamed("event_count", "frequency")
+    #churn_data = churn_data.withColumnRenamed("event_count", "frequency")
 
     churn_data = churn_data.select('login', 'followers_count', 'following_count', 'blog',
                    'company', 'created_at', 'public_repos_count', 'public_gists_count',
@@ -83,9 +116,10 @@ def get_merged_data(appName='gh-churn'):
                    'PullRequestEvent_count', 'PullRequestReviewCommentEvent_count',
                    'PushEvent_count', 'ReleaseEvent_count', 'WatchEvent_count')
     
-    # remove outliers with very high number of Events in early 2016.    
+    # remove outliers with very high number of Events in early 2016.
+    n_event_threshold = 200 if year == '2016' else 600
     n_total_users = churn_data.count()
-    churn_data = churn_data.filter(churn_data.frequency < 200)
+    churn_data = churn_data.filter(churn_data.frequency < n_event_threshold)
     n_users = churn_data.count()
     print('% of users dropped {0}'.format(100 - (n_users / n_total_users * 100)))
     
