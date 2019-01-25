@@ -18,7 +18,11 @@ import helper as h
 from google.cloud import bigquery
 client = bigquery.Client()
 
-gh = login('bps10', password='boniver#3')
+# GitHub api
+password = h.get_gh_credentials()
+gh = login('bps10', password=password)
+
+# Load PySpark pipeline and model
 spark = SparkSession.builder.appName('App').getOrCreate()
 testM = LogisticRegressionModel.load("lrModel")
 print('-----Model loaded-----')

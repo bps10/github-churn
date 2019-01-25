@@ -14,6 +14,11 @@ def feature_scaling(df):
     pass
 
 
+def get_gh_credentials():
+    f = open('gh-password.txt', 'r') 
+    return f.read()[:-1]
+
+
 def eval_metrics(predictions):
     predictions = predictions.toPandas()
     TP = np.sum((predictions.label == 1) & (predictions.prediction == 1))

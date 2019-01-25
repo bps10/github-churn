@@ -13,3 +13,4 @@ pipeline/metadata pipeline/stages
 web/app.py
 pipeline/*
 lrModel/*
+gh-password.txt
