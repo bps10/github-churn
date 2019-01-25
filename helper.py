@@ -7,6 +7,7 @@ import os
 from pyspark.sql import SparkSession, udf
 from pyspark.sql.functions import to_timestamp, datediff
 from pyspark.sql.types import IntegerType, FloatType, DoubleType, BooleanType
+from pyspark.sql import DataFrame
 
 
 ## feature scaling
@@ -19,12 +20,16 @@ def get_gh_credentials():
     return f.read()[:-1]
 
 
-def eval_metrics(predictions):
-    predictions = predictions.toPandas()
-    TP = np.sum((predictions.label == 1) & (predictions.prediction == 1))
-    FP = np.sum((predictions.label == 0) & (predictions.prediction == 1))
-    FN = np.sum((predictions.label == 1) & (predictions.prediction == 0))
-    TN = np.sum((predictions.label == 0) & (predictions.prediction == 0))
+def eval_metrics(prediction, label=None):
+    if isinstance(prediction, DataFrame) and label is None:
+        predictions = prediction.toPandas()
+        label = predictions.label
+        prediction = predictions.prediction
+        
+    TP = np.sum((label == 1) & (prediction == 1))
+    FP = np.sum((label == 0) & (prediction == 1))
+    FN = np.sum((label == 1) & (prediction == 0))
+    TN = np.sum((label == 0) & (prediction == 0))
     precision = TP / (TP + FP)
     recall = TP / (TP + FN)
     accuracy = (TP + TN) / (TP + FP + FN + TN)
