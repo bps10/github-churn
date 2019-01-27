@@ -9,10 +9,63 @@ from pyspark.sql.functions import to_timestamp, datediff
 from pyspark.sql.types import IntegerType, FloatType, DoubleType, BooleanType
 from pyspark.sql import DataFrame
 
+from google.cloud import bigquery
 
+
+count_columns =  ['CommitCommentEvent_count', 'CreateEvent_count', 'DeleteEvent_count',
+                  'ForkEvent_count', 'GollumEvent_count', 'IssueCommentEvent_count',
+                  'IssuesEvent_count', 'MemberEvent_count', 'PublicEvent_count', 
+                  'PullRequestEvent_count', 'PullRequestReviewCommentEvent_count',
+                  'PushEvent_count', 'ReleaseEvent_count', 'WatchEvent_count']
+    
 ## feature scaling
 def feature_scaling(df):
     pass
+
+
+def get_contributors(gh, owner, repo):
+    repo = gh.repository('numpy', 'numpy')
+    return [[contributor.login, contributor.contributions] for contributor in repo.contributors()]
+
+
+def create_query_from_list(user_list):
+    txt = (
+    """SELECT  
+      actor.login,
+      COUNT(type) as event_count, 
+      MAX(created_at) as last_event, 
+      MIN(created_at) as first_event,
+      SUM(CASE WHEN type = 'CommitCommentEvent' then 1 else 0 end) as CommitCommentEvent_count,
+      SUM(CASE WHEN type = 'CreateEvent' then 1 else 0 end) as CreateEvent_count,
+      SUM(CASE WHEN type = 'DeleteEvent' then 1 else 0 end) as DeleteEvent_count,
+      SUM(CASE WHEN type = 'ForkEvent' then 1 else 0 end) as ForkEvent_count,
+      SUM(CASE WHEN type = 'GollumEvent' then 1 else 0 end) as GollumEvent_count,
+      SUM(CASE WHEN type = 'IssueCommentEvent' then 1 else 0 end) as IssueCommentEvent_count,
+      SUM(CASE WHEN type = 'IssuesEvent' then 1 else 0 end) as IssuesEvent_count,
+      SUM(CASE WHEN type = 'MemberEvent' then 1 else 0 end) as MemberEvent_count,
+      SUM(CASE WHEN type = 'PublicEvent' then 1 else 0 end) as PublicEvent_count,
+      SUM(CASE WHEN type = 'PullRequestEvent' then 1 else 0 end) as PullRequestEvent_count,
+      SUM(CASE WHEN type = 'PullRequestReviewCommentEvent' then 1 else 0 end) as PullRequestReviewCommentEvent_count,
+      SUM(CASE WHEN type = 'PushEvent' then 1 else 0 end) as PushEvent_count,
+      SUM(CASE WHEN type = 'ReleaseEvent' then 1 else 0 end) as ReleaseEvent_count,
+      SUM(CASE WHEN type = 'WatchEvent' then 1 else 0 end) as WatchEvent_count,
+
+      FROM 
+      [githubarchive:year.2018]
+    WHERE (actor.login = '""")
+
+    end = ("""' AND public)
+    GROUP by actor.login;
+
+    """)
+
+    nusers = len(user_list)
+    for i, user in enumerate(user_list):
+        if i < nusers - 1:
+            txt += user + """' OR actor.login = '""" 
+        else:
+            txt += user + end
+    return txt
 
 
 def get_gh_credentials():
@@ -73,18 +126,12 @@ def get_merged_data(appName='gh-churn', year='2016'):
     
     churn_data = users.join(first_period, users['login'] == first_period['actor'], 
                             how='left')
-
-    keep_columns =  ['CommitCommentEvent_count', 'CreateEvent_count', 'DeleteEvent_count', 
-                   'ForkEvent_count', 'GollumEvent_count', 'IssueCommentEvent_count',
-                   'IssuesEvent_count', 'MemberEvent_count', 'PublicEvent_count', 
-                   'PullRequestEvent_count', 'PullRequestReviewCommentEvent_count',
-                   'PushEvent_count', 'ReleaseEvent_count', 'WatchEvent_count']
     
     second_period = second_period.withColumn('event_count', 
-                             sum(second_period[col] for col in second_period.columns if col in keep_columns))
+                             sum(second_period[col] for col in second_period.columns if col in count_columns))
     
     churn_data = churn_data.withColumn('frequency', 
-                             sum(churn_data[col] for col in churn_data.columns if col in keep_columns))
+                             sum(churn_data[col] for col in churn_data.columns if col in count_columns))
     
     second_period_event_count = second_period.selectExpr(
         "actor as login", "event_count as second_period_event_count")
@@ -191,6 +238,26 @@ def get_batch(gh, df, random_indexes, start_index, existing_users=set(),
             
     return d, start_index + batch_size
 
+
+def get_repo_contrib_history(gh, gc_client, owner, repo):
+    '''
+    '''
+    contributors = get_contributors(gh, owner, repo)
+    contributors_df = pd.DataFrame(contributors, columns=['login', 'repo_contributions_count'])
+    contributors_list = np.asarray(contributors)[:, 0]
+    
+    query = create_query_from_list(contributors_list)
+
+    job_config = bigquery.QueryJobConfig()
+    job_config.use_legacy_sql = True
+    df = gc_client.query(query, location="US", job_config=job_config).to_dataframe()
+    
+    contributors_df = pd.DataFrame(contributors, columns=['login', 'repo_contributions_count'])
+    contributors_df = contributors_df.merge(df, right_on='actor_login', left_on='login', how='left')
+    contributors_df[count_columns] = contributors_df[count_columns].fillna(0).astype(int)
+    contributors_df['event_count'] = contributors_df.event_count.fillna(0)
+    
+    return contributors_df
 
 
 def get_user_events(user, bigquery, client):
