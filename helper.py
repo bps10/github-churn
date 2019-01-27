@@ -27,31 +27,40 @@ def get_contributors(gh, owner, repo):
     repo = gh.repository('numpy', 'numpy')
     return [[contributor.login, contributor.contributions] for contributor in repo.contributors()]
 
-
 def create_query_from_list(user_list):
+    '''
+    '''
     txt = (
-    """SELECT  
-      actor.login,
-      COUNT(type) as event_count, 
-      MAX(created_at) as last_event, 
-      MIN(created_at) as first_event,
-      SUM(CASE WHEN type = 'CommitCommentEvent' then 1 else 0 end) as CommitCommentEvent_count,
-      SUM(CASE WHEN type = 'CreateEvent' then 1 else 0 end) as CreateEvent_count,
-      SUM(CASE WHEN type = 'DeleteEvent' then 1 else 0 end) as DeleteEvent_count,
-      SUM(CASE WHEN type = 'ForkEvent' then 1 else 0 end) as ForkEvent_count,
-      SUM(CASE WHEN type = 'GollumEvent' then 1 else 0 end) as GollumEvent_count,
-      SUM(CASE WHEN type = 'IssueCommentEvent' then 1 else 0 end) as IssueCommentEvent_count,
-      SUM(CASE WHEN type = 'IssuesEvent' then 1 else 0 end) as IssuesEvent_count,
-      SUM(CASE WHEN type = 'MemberEvent' then 1 else 0 end) as MemberEvent_count,
-      SUM(CASE WHEN type = 'PublicEvent' then 1 else 0 end) as PublicEvent_count,
-      SUM(CASE WHEN type = 'PullRequestEvent' then 1 else 0 end) as PullRequestEvent_count,
-      SUM(CASE WHEN type = 'PullRequestReviewCommentEvent' then 1 else 0 end) as PullRequestReviewCommentEvent_count,
-      SUM(CASE WHEN type = 'PushEvent' then 1 else 0 end) as PushEvent_count,
-      SUM(CASE WHEN type = 'ReleaseEvent' then 1 else 0 end) as ReleaseEvent_count,
-      SUM(CASE WHEN type = 'WatchEvent' then 1 else 0 end) as WatchEvent_count,
+    """
+    SELECT  
+          actor.login,
+          COUNT(type) as event_count, 
+          MAX(created_at) as last_event, 
+          MIN(created_at) as first_event,
+          SUM(CASE WHEN type = 'CommitCommentEvent' then 1 else 0 end) as CommitCommentEvent_count,
+          SUM(CASE WHEN type = 'CreateEvent' then 1 else 0 end) as CreateEvent_count,
+          SUM(CASE WHEN type = 'DeleteEvent' then 1 else 0 end) as DeleteEvent_count,
+          SUM(CASE WHEN type = 'ForkEvent' then 1 else 0 end) as ForkEvent_count,
+          SUM(CASE WHEN type = 'GollumEvent' then 1 else 0 end) as GollumEvent_count,
+          SUM(CASE WHEN type = 'IssueCommentEvent' then 1 else 0 end) as IssueCommentEvent_count,
+          SUM(CASE WHEN type = 'IssuesEvent' then 1 else 0 end) as IssuesEvent_count,
+          SUM(CASE WHEN type = 'MemberEvent' then 1 else 0 end) as MemberEvent_count,
+          SUM(CASE WHEN type = 'PublicEvent' then 1 else 0 end) as PublicEvent_count,
+          SUM(CASE WHEN type = 'PullRequestEvent' then 1 else 0 end) as PullRequestEvent_count,
+          SUM(CASE WHEN type = 'PullRequestReviewCommentEvent' then 1 else 0 end) as PullRequestReviewCommentEvent_count,
+          SUM(CASE WHEN type = 'PushEvent' then 1 else 0 end) as PushEvent_count,
+          SUM(CASE WHEN type = 'ReleaseEvent' then 1 else 0 end) as ReleaseEvent_count,
+          SUM(CASE WHEN type = 'WatchEvent' then 1 else 0 end) as WatchEvent_count
 
-      FROM 
-      [githubarchive:year.2018]
+    FROM (
+      SELECT public, type, repo.name, actor.login, created_at,
+        JSON_EXTRACT(payload, '$.action') as event, 
+      FROM (TABLE_DATE_RANGE([githubarchive:day.] , 
+        TIMESTAMP('2018-08-01'), 
+        TIMESTAMP('2018-12-31')
+      ))
+      )
+  
     WHERE (actor.login = '""")
 
     end = ("""' AND public)
