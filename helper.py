@@ -4,10 +4,10 @@ import matplotlib.pylab as plt
 import pandas as pd
 import os
 
-from pyspark.sql import SparkSession, udf
+from pyspark.sql import SparkSession, udf, DataFrame
 from pyspark.sql.functions import to_timestamp, datediff
 from pyspark.sql.types import IntegerType, FloatType, DoubleType, BooleanType
-from pyspark.sql import DataFrame
+from pyspark.sql import functions as F
 
 from google.cloud import bigquery
 
@@ -20,7 +20,18 @@ count_columns =  ['CommitCommentEvent_count', 'CreateEvent_count', 'DeleteEvent_
     
 ## feature scaling
 def feature_scaling(df):
-    pass
+    '''Log transform all numeric cols.
+    '''
+    for col in count_columns:
+        df = df.withColumn(col, F.log10(df[col] + 1))
+    
+    # scale remaining cols
+    scale_cols = ['followers_count', 'following_count',
+                   'public_repos_count', 'public_gists_count']
+    for col in scale_cols:
+        df = df.withColumn(col, F.log10(df[col] + 1))
+        
+    return df
 
 
 def get_contributors(gh, owner, repo):
