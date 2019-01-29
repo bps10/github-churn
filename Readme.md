@@ -99,7 +99,7 @@ for old in *; do mv $old `basename $old `.csv; done;
 
 
 ## Visualize Random Trees
-
+[Eurekatrees](https://github.com/ChuckWoodraska/EurekaTrees)
 ```
 pip install eurekatrees
 ```

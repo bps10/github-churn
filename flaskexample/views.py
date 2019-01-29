@@ -6,11 +6,12 @@ from pyspark.ml import Pipeline
 from pyspark.sql import SparkSession
 from pyspark.sql.types import DoubleType
 from pyspark.ml.classification import LogisticRegressionModel
+from pyspark.ml.clustering import KMeansModel
 from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.linalg import SparseVector
 
 from github3 import login
-from lifetimes import BetaGeoFitter
+#from lifetimes import BetaGeoFitter
 import json
 
 import helper as h
@@ -24,130 +25,144 @@ gh = login('bps10', password=password)
 
 # Load PySpark pipeline and model
 spark = SparkSession.builder.appName('App').getOrCreate()
-testM = LogisticRegressionModel.load("lrModel")
-print('-----Model loaded-----')
+
+LRmodelCompany = LogisticRegressionModel.load("lrModel_company_1")
+LRmodelLow = LogisticRegressionModel.load("lrModel_company_0high_low_0")
+LRmodelHigh = LogisticRegressionModel.load("lrModel_company_0high_low_1")
+KMmodel = KMeansModel.load("KMeans_model")
+
+print('-----Models loaded-----')
 pipeline = Pipeline.load('pipeline')
 print('-----Pipeline loaded-----')
 
-d = {'login': '0loky0',
-     'followers_count': 0,
-     'following_count': 1,
-     'blog': 0,
-     'company': 0,
-     'created_at': '2011-05-24 20:15:25+00:00',
-     'public_repos_count': 7,
-     'public_gists_count': 0,
-     'hireable': 1,
-     'updated_at': '2019-01-09 15:03:59+00:00',
-     'time_between_first_last_event': '10 days 15:29:06.000000000',
-     'last_event': '2016-04-15 10:14:03 UTC',
-     'first_event': '2016-04-04 18:44:57 UTC',
-     'frequency': 19,
-     'second_period_event_count': 0,
-     'WatchEvent_count': 5,
-     'CommitCommentEvent_count': 0,
-     'CreateEvent_count': 5,
-     'DeleteEvent_count': 0,
-     'ForkEvent_count': 2,
-     'GollumEvent_count': 0,
-     'IssueCommentEvent_count': 0,
-     'IssuesEvent_count': 0,
-     'MemberEvent_count': 0,
-     'PublicEvent_count': 0,
-     'PullRequestEvent_count': 0,
-     'PullRequestReviewCommentEvent_count': 0,
-     'PushEvent_count': 12,
-     'ReleaseEvent_count': 0
-     }
-
-with open('data.json', 'w') as fp:
-    json.dump(d, fp)
-
 # Load CVL model
-CLV_model = BetaGeoFitter()
-CLV_model.load_model('CLV.pkl')
+#CLV_model = BetaGeoFitter()
+#CLV_model.load_model('CLV.pkl')
 
 @app.route('/')
 def index():
-  return render_template('index.html', name='Brian')
+	return render_template('index.html', name='Brian')
 
 @app.route('/', methods=['POST'])
 def data_page():
-  username = request.form['username']
+	username = request.form['username']
 
-  user_profile = h.get_user_info(gh, username)
-  user_profile_df = pd.DataFrame(user_profile, index=[0])
+	user_profile = h.get_user_info(gh, username)
+	user_profile_df = pd.DataFrame(user_profile, index=[0])
+	user_profile_df = user_profile_df.fillna(0)
 
-  event_data = h.get_user_events(username, bigquery, client)
-  usr_data = user_profile_df.join(event_data)
-  usr_data['second_period_event_count'] = [0]
-  usr_data = usr_data.fillna(0)
-  print(usr_data)
-  print(usr_data.transpose())
+	event_data = h.get_user_events(username, bigquery, client)
+	event_data = event_data.fillna(0)
+	#event_data = add_time_fields(event_data, user_profile_df)
 
-  spark_user = spark.createDataFrame(usr_data)
-  spark_user = spark_user.drop('bio')
-  spark_user = h.convert_bigint_to_int(spark_user)
+	usr_data = user_profile_df.join(event_data)
+	usr_data['second_period_event_count'] = [0]	
+	usr_data = h.process_raw_df(usr_data)
+	print(usr_data.transpose())
 
-  #data = spark.read.json('data.json')
-  stay_or_go, probability = predict(spark_user)
-  print([username, stay_or_go, probability])
+	spark_user = spark.createDataFrame(usr_data)
+	spark_user = spark_user.drop('bio')
+	spark_user = h.convert_bigint_to_int(spark_user)
 
-  # add one follower and rerun model
-  new_data = spark_user.withColumn(
-    'followers_count', spark_user['followers_count'] + 1)
-  stay_or_go1, probability1 = predict(new_data)
+	model = get_user_specific_model(spark_user)
+	predictions = get_predict_dict(spark_user, model)
 
-  # add one follower and rerun model
-  new_data = spark_user.withColumn(
-    'WatchEvent_count', spark_user['WatchEvent_count'] + 1)
-  stay_or_go2, probability2 = predict(new_data)
-  print(probability2)
+	#print(CLV_model.fit([19], [50], [100]))
 
-  # add one follower and rerun model
-  new_data = spark_user.withColumn(
-    'blog', spark_user['blog'] + 1)
-  stay_or_go3, probability3 = predict(new_data)
-  print(probability3)
-
-  new_data = spark_user.withColumn(
-    'blog', spark_user['blog'] + 1)
-  new_data = new_data.withColumn(
-    'WatchEvent_count', new_data['WatchEvent_count'] + 1)
-  new_data = new_data.withColumn(
-    'followers_count', new_data['followers_count'] + 1)
-
-  stay_or_go4, probability4 = predict(new_data)
-  print('All three {0}'.format(probability4))
-
-  print(CLV_model.fit([19], [50], [100]))
-
-  return render_template('index.html',
-                         stay_or_go=stay_or_go,
-                         name=username,
-                         followers_count=user_profile['followers_count'],
-                         following_count=user_profile['following_count'],
-                         probability=probability,
-                         addUserProb=probability1,
-                         addWatchProb=probability2,
-                         addBlog=probability3,
-                         addAllThree=probability4)
+	return render_template('index.html',
+							stay_or_go=predictions['stay_or_go0'],
+							name=username,
+							followers_count=user_profile['followers_count'],
+							following_count=user_profile['following_count'],
+							probability=predictions['probability0'],
+							addUserProb=predictions['probability1'],
+							addWatchProb=predictions['probability2'],
+							addBlog=predictions['probability3'],
+							addAllThree=predictions['probability4'])
 
 
-def predict(data):
-  data = data.withColumn("second_period_event_count",                                   data.second_period_event_count.cast(DoubleType()))
-  print(data.head())
-  pipelineModel = pipeline.fit(data)
-  print(pipelineModel)
-  usr_data = pipelineModel.transform(data)
+def get_user_specific_model(spark_user, userIndex=0):
+	spark_user = h.create_KMeans_features(spark_user)
+	spark_user = KMmodel.transform(spark_user)
+	print('---------------------')
+	spark_df = spark_user.toPandas()
+	print(spark_df)
+	if spark_df.iloc[userIndex].company:
+		print('model = LRmodelCompany')
+		model = LRmodelCompany
+	else:
+		if spark_df.iloc[userIndex].high_low_use:
+			print('model = LRmodelHigh')
+			model = LRmodelHigh
+		else:
+			print('model = LRmodelLow')
+			model = LRmodelLow
 
-  prediction = testM.transform(usr_data)
-  prediction = prediction.select(['probability',
-                                  'prediction']).collect()#[0][1]
-  if prediction[0][1] > 0.5:
-    stay_or_go = 'remain active'
-    probability = str(round(prediction[0][0][1], 2))
-  else:
-    stay_or_go = 'leave GitHub'
-    probability = str(round(prediction[0][0][0], 2))
-  return stay_or_go, probability
+	return model
+
+def get_predict_dict(spark_user, model):
+	print(spark_user)
+	print('=======Predicting 1 =========')	
+	p = {}
+	p['stay_or_go0'], p['probability0'] = predict(spark_user, model)	
+	
+	# add one follower and rerun model
+	print('=======Predicting 2 =========')		
+	new_data = spark_user.withColumn(
+	'followers_count', spark_user['followers_count'] + 1)
+	p['stay_or_go1'], p['probability1'] = predict(new_data, model)	
+
+	# add one follower and rerun model
+	print('=======Predicting 3 =========')
+	new_data = spark_user.withColumn(
+	'WatchEvent_count', spark_user['WatchEvent_count'] + 1)
+	p['stay_or_go2'], p['probability2'] = predict(new_data, model)	
+
+	# add one follower and rerun model
+	print('=======Predicting 4 =========')
+	new_data = spark_user.withColumn(
+	'blog', spark_user['blog'] + 1)
+	p['stay_or_go3'], p['probability3'] = predict(new_data, model)	
+
+	new_data = spark_user.withColumn(
+	'blog', spark_user['blog'] + 1)
+	new_data = new_data.withColumn(
+	'WatchEvent_count', new_data['WatchEvent_count'] + 1)
+	new_data = new_data.withColumn(
+	'followers_count', new_data['followers_count'] + 1)
+
+	p['stay_or_go4'], p['probability4'] = predict(new_data, model)
+	print(p)
+
+	return p
+
+def predict(data, model):
+	data = data.withColumn("second_period_event_count", 
+		data.second_period_event_count.cast(DoubleType())
+		)
+	pipelineModel = pipeline.fit(data)
+	usr_data = pipelineModel.transform(data)
+
+	prediction = model.transform(usr_data)
+	prediction = prediction.select(['probability',
+									'prediction']).collect()#[0][1]
+	if prediction[0][1] > 0.5:
+		stay_or_go = 'remain active'
+		probability = str(round(prediction[0][0][1], 2))
+	else:
+		stay_or_go = 'leave GitHub'
+		probability = str(round(prediction[0][0][0], 2))
+	return stay_or_go, probability
+
+
+def add_time_fields(event_data, user_df):
+	print(event_data.last_event)
+	print(event_data)
+	event_data['time_between_first_last_event'] = (
+		pd.to_datetime(event_data.last_event) -
+		pd.to_datetime(event_data.first_event)) / pd.Timedelta(days=1)
+	event_data['recency'] = (
+		pd.to_datetime(event_data.last_event[:-4]) -
+		pd.to_datetime(user_df.created_at[:-4])) / pd.Timedelta(days=1)
+
+	return event_data
