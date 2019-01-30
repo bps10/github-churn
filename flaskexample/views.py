@@ -47,9 +47,9 @@ print(pop_repos)
 #CLV_model = BetaGeoFitter()
 #CLV_model.load_model('CLV.pkl')
 
-@app.route('/repo', methods=("POST", "GET"))
-def html_table():
-	reponame = 'matplotlib'
+#@app.route('/repo', methods=("POST", "GET"))
+def html_table(reponame):
+	#reponame = 'matplotlib'
 	contributors = pop_repos[pop_repos.repo == reponame]		
 	#contributors = contributors.iloc[[0]]
 	print(contributors.last_event)
@@ -76,59 +76,79 @@ def html_table():
 	all_data = pd.concat(all_data)
 
 	all_data = all_data.sort_values(by='probability', ascending=True)
+	all_data = all_data[:25].round({'probability': 4}).set_index('login')
 
-	#fig, ax = plt.subplots(1, 1)
-	#all_data.probability.hist(ax=ax, bins=10)
-	#fig.savefig('/flaskexample/static/probability.png')
+	fig, ax = plt.subplots(1, 1)
+	all_data.probability.hist(ax=ax, bins=10)
+	plt.xlim([0, 1])
+	plt.xlabel('probability of remaining active', fontsize=15)
+	plt.ylabel('# of users', fontsize=15)
+	fig.savefig('flaskexample/static/probability.png')
 
 	#event_data = h.get_user_events('bps10', bigquery, client)
-	return render_template('table.html', 
-		tables=[all_data.to_html(classes='data')], 
-		titles=all_data.columns.values,
-		#url ='/flaskexample/static/probability.png'
-		)
+	return all_data
 
 
 @app.route('/')
 def index():
-	return render_template('index.html', name='Brian')
+	return render_template('index.html', 
+		username_exists=False,
+		name=False)
 
 @app.route('/', methods=['POST'])
-def data_page():
-	username = request.form['username']
+def data_page():	
+	username_exists = False
+	if 'username' in request.form:
+		username = request.form['username']
+		username_exists = True
+	try:		
+		user_profile = h.get_user_info(gh, username)		
+	except:
+		username_exists = False		
 
-	user_profile = h.get_user_info(gh, username)
-	user_profile_df = pd.DataFrame(user_profile, index=[0])
-	user_profile_df = user_profile_df.fillna(0)
+	reponame_exists = False
+	if 'reponame' in request.form:
+		reponame_exists = True
+		reponame = request.form['reponame']
+		print(request.form['reponame'])
 
-	event_data = h.get_user_events(username, bigquery, client)
-	event_data['last_event'] = event_data.last_event.fillna(pd.to_datetime('2018-08-01 01:00:00'))
-	event_data = event_data.fillna(0)
-	#event_data = add_time_fields(event_data, user_profile_df)
+	if username_exists:
+		user_profile_df = pd.DataFrame(user_profile, index=[0])
+		user_profile_df = user_profile_df.fillna(0)
 
-	usr_data = user_profile_df.join(event_data)
-	usr_data['second_period_event_count'] = [0]	
-	usr_data = h.process_raw_df(usr_data)
-	print(usr_data.transpose())	
+		event_data = h.get_user_events(username, bigquery, client)
+		event_data['last_event'] = event_data.last_event.fillna(pd.to_datetime('2018-08-01 01:00:00'))
+		event_data = event_data.fillna(0)
+		#event_data = add_time_fields(event_data, user_profile_df)
+
+		usr_data = user_profile_df.join(event_data)
+		usr_data['second_period_event_count'] = [0]	
+		usr_data = h.process_raw_df(usr_data)
+		print(usr_data.transpose())	
+			
+		spark_user = pandas_to_spark(usr_data)
+
+		model = get_user_specific_model(spark_user)
+		predictions = get_predict_dict(spark_user, model)
+
+		#print(CLV_model.fit([19], [50], [100]))
+
+		return render_template('index.html',
+								username_exists=username_exists,
+								prediction=predictions,								
+								name=username,
+								)
+
+	elif reponame_exists:
+
+		all_data = html_table(reponame)
+		return render_template('index.html', 
+				reponame_exists=reponame_exists,
+				tables=[all_data.to_html(classes='table table-striped')], 
+				titles=all_data.columns.values,
+				url ='static/probability.png'
+				)
 		
-	spark_user = pandas_to_spark(usr_data)
-
-	model = get_user_specific_model(spark_user)
-	predictions = get_predict_dict(spark_user, model)
-
-	#print(CLV_model.fit([19], [50], [100]))
-
-	return render_template('index.html',
-							stay_or_go=predictions['stay_or_go0'],
-							name=username,
-							followers_count=user_profile['followers_count'],
-							following_count=user_profile['following_count'],
-							probability=predictions['probability0'],
-							addUserProb=predictions['probability1'],
-							addWatchProb=predictions['probability2'],
-							addBlog=predictions['probability3'],
-							addAllThree=predictions['probability4'])
-
 # -------------------------------------------------
 # -------------------------------------------------
 def predict_users(data, model, all_data):	

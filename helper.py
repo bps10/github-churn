@@ -22,7 +22,7 @@ count_columns =  ['CommitCommentEvent_count', 'CreateEvent_count', 'DeleteEvent_
                   'PushEvent_count', 'ReleaseEvent_count', 'WatchEvent_count']
     
 scale_columns = ['followers_count', 'following_count',
-                'public_repos_count', 'public_gists_count']    
+                'public_repos_count', 'public_gists_count', 'recency']    
 
 
 def create_KMeans_features(df):
@@ -53,12 +53,14 @@ def create_KMeans_features(df):
 def process_raw_df(df):
     '''Process a raw pandas df
     '''
+    # 2. Add recency
+    df = add_recency_column(df)    
     # 1. Handle NaN
     df[count_columns] = df[count_columns].fillna(0)
-    df[scale_columns] = df[scale_columns].fillna(0)
-    # 2. Feature scaling.
+    df[scale_columns] = df[scale_columns].fillna(0)    
+    # 3. Feature scaling.
     df = feature_scaling(df)
-    # 3. Rename event_data
+    # 4. Rename event_data
     df = df.rename(index=str, columns={"event_count": "frequency"})
 
     return df
@@ -193,15 +195,21 @@ def eval_metrics(prediction, label=None):
     print('F1-score:  {0}'.format(np.round(f1score, 4)))
 
 
+def add_recency_column(df):
+    
+    df['created_at'] = pd.to_datetime(df.created_at[:10], errors='coerce')
+    df['last_event'] = pd.to_datetime(df.last_event[:10], errors='coerce')    
+    df['recency'] = (df.last_event - df.created_at)  / pd.Timedelta(days = 1)    
+    return df
+
+
 def add_time_columns(df, end_date='2016-06-01 23:59:59+00:00'):
     
     df['created_at'] = pd.to_datetime(df.created_at[:10], errors='coerce')
     df['last_event'] = pd.to_datetime(df.last_event[:10], errors='coerce')
     df['first_event'] = pd.to_datetime(df.first_event[:10], errors='coerce')
     
-    end_date = pd.to_datetime(end_date[:10])
-    print(df.created_at)
-    print(end_date)
+    end_date = pd.to_datetime(end_date[:10])    
     df['T'] = np.round((end_date - df.created_at) / pd.Timedelta(days = 1))
     df['recency'] = (df.last_event - df.created_at)  / pd.Timedelta(days = 1)
     df['time_between_first_last_event'] = (df.last_event - df.first_event) / pd.Timedelta(days = 1)

@@ -14,3 +14,4 @@ web/app.py
 pipeline/*
 lrModel/*
 gh-password.txt
+codechurn.pem
