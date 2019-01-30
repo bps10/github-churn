@@ -51,6 +51,8 @@ def create_KMeans_features(df):
     return df
 
 def process_raw_df(df):
+    '''Process a raw pandas df
+    '''
     # 1. Handle NaN
     df[count_columns] = df[count_columns].fillna(0)
     df[scale_columns] = df[scale_columns].fillna(0)
@@ -112,7 +114,7 @@ def add_high_low_flag(_data):
 
 
 def get_contributors(gh, owner, repo):
-    repo = gh.repository('numpy', 'numpy')
+    repo = gh.repository(owner, repo)
     return [[contributor.login, contributor.contributions] for contributor in repo.contributors()]
 
 
@@ -213,6 +215,26 @@ def write_tree_to_file(tree, filename):
     text_file.close()
     print('Saved to fullfile')
 
+
+def add_date_info_spark(df, convert=True):
+    '''Take a spark df and add date info
+    '''
+    if convert:
+        f_datestring=udf.UserDefinedFunction(lambda x: x[:-4] + '+00:00', StringType())
+        df = df.withColumn("first_event", f_datestring(df.first_event))
+        df = df.withColumn("last_event", f_datestring(df.last_event))
+
+    df = df.withColumn("first_event", to_timestamp(df.first_event))
+    df = df.withColumn("last_event", to_timestamp(df.last_event))
+    df = df.withColumn("created_at", to_timestamp(df.created_at))
+    df = df.withColumn("updated_at", to_timestamp(df.updated_at))
+    
+    df = df.withColumn("recency", datediff(df.last_event, 
+                                                           df.created_at))
+    df = df.withColumn("time_between_first_last_event", 
+                                   datediff(df.last_event, df.first_event))
+    return df
+
     
 def get_merged_data(appName='gh-churn', year='2016'):
     
@@ -226,7 +248,8 @@ def get_merged_data(appName='gh-churn', year='2016'):
     
     churn_data = users.join(first_period, users['login'] == first_period['actor'], 
                             how='left')
-    
+    churn_data = add_date_info_spark(churn_data)
+
     second_period = second_period.withColumn('event_count', 
                              sum(second_period[col] for col in second_period.columns if col in count_columns))
     
@@ -240,20 +263,6 @@ def get_merged_data(appName='gh-churn', year='2016'):
                                  on='login', how='left')
     churn_data = churn_data.fillna(0, subset='second_period_event_count')
 
-    f_datestring=udf.UserDefinedFunction(lambda x: x[:-4] + '+00:00', StringType())
-
-    churn_data = churn_data.withColumn("first_event", f_datestring(churn_data.first_event))
-    churn_data = churn_data.withColumn("last_event", f_datestring(churn_data.last_event))
-    
-    churn_data = churn_data.withColumn("first_event", to_timestamp(churn_data.first_event))
-    churn_data = churn_data.withColumn("last_event", to_timestamp(churn_data.last_event))
-    churn_data = churn_data.withColumn("created_at", to_timestamp(churn_data.created_at))
-    churn_data = churn_data.withColumn("updated_at", to_timestamp(churn_data.updated_at))
-    
-    churn_data = churn_data.withColumn("recency", datediff(churn_data.last_event, 
-                                                           churn_data.created_at))
-    churn_data = churn_data.withColumn("time_between_first_last_event", 
-                                   datediff(churn_data.last_event, churn_data.first_event))
 
     churn_data = churn_data.withColumn("public_repos_count",
                                        churn_data.public_repos_count.cast(IntegerType()))

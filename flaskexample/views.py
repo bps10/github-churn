@@ -1,5 +1,7 @@
 from flaskexample import app
 import pandas as pd
+import numpy as np
+import matplotlib.pylab as plt
 from flask import render_template, request
 
 from pyspark.ml import Pipeline
@@ -9,11 +11,10 @@ from pyspark.ml.classification import LogisticRegressionModel
 from pyspark.ml.clustering import KMeansModel
 from pyspark.ml.feature import VectorAssembler
 from pyspark.ml.linalg import SparseVector
+from pyspark.sql import functions as F
 
 from github3 import login
 #from lifetimes import BetaGeoFitter
-import json
-
 import helper as h
 
 from google.cloud import bigquery
@@ -34,10 +35,59 @@ KMmodel = KMeansModel.load("KMeans_model")
 print('-----Models loaded-----')
 pipeline = Pipeline.load('pipeline')
 print('-----Pipeline loaded-----')
-
+ 
+pop_repos = pd.read_pickle('popular_repos.pickle')
+pop_repos['last_event'] = pop_repos.last_event.astype(str)
+pop_repos['last_event'] = pop_repos.last_event.fillna('2018-08-01 01:00:00+00:00')
+#pop_repos = pop_repos.drop(columns=['bio'])
+#pop_repos = h.process_raw_df(pop_repos)
+pop_repos = pop_repos.drop(columns=['actor_login'])
+print(pop_repos)
 # Load CVL model
 #CLV_model = BetaGeoFitter()
 #CLV_model.load_model('CLV.pkl')
+
+@app.route('/repo', methods=("POST", "GET"))
+def html_table():
+	reponame = 'matplotlib'
+	contributors = pop_repos[pop_repos.repo == reponame]		
+	#contributors = contributors.iloc[[0]]
+	print(contributors.last_event)
+	contributors['frequency'] = contributors['event_count']	
+	contributors['second_period_event_count'] = np.zeros(len(contributors))
+
+	contributors = pandas_to_spark(contributors, False)
+	contributors = h.create_KMeans_features(contributors)	
+	contributors = KMmodel.transform(contributors)		
+	print(contributors)
+
+	company_users = contributors[contributors.company == 1]
+	high_users = contributors[contributors.high_low_user == 1]
+	low_users = contributors[contributors.high_low_user == 0]
+
+	all_data = []
+	all_data = predict_users(company_users, LRmodelCompany, all_data)
+	all_data = predict_users(high_users, LRmodelHigh, all_data)
+	all_data = predict_users(low_users, LRmodelLow, all_data)
+
+	print(all_data)
+	# sort the data based on probability	
+	# compute a histogram
+	all_data = pd.concat(all_data)
+
+	all_data = all_data.sort_values(by='probability', ascending=True)
+
+	#fig, ax = plt.subplots(1, 1)
+	#all_data.probability.hist(ax=ax, bins=10)
+	#fig.savefig('/flaskexample/static/probability.png')
+
+	#event_data = h.get_user_events('bps10', bigquery, client)
+	return render_template('table.html', 
+		tables=[all_data.to_html(classes='data')], 
+		titles=all_data.columns.values,
+		#url ='/flaskexample/static/probability.png'
+		)
+
 
 @app.route('/')
 def index():
@@ -52,17 +102,16 @@ def data_page():
 	user_profile_df = user_profile_df.fillna(0)
 
 	event_data = h.get_user_events(username, bigquery, client)
+	event_data['last_event'] = event_data.last_event.fillna(pd.to_datetime('2018-08-01 01:00:00'))
 	event_data = event_data.fillna(0)
 	#event_data = add_time_fields(event_data, user_profile_df)
 
 	usr_data = user_profile_df.join(event_data)
 	usr_data['second_period_event_count'] = [0]	
 	usr_data = h.process_raw_df(usr_data)
-	print(usr_data.transpose())
-
-	spark_user = spark.createDataFrame(usr_data)
-	spark_user = spark_user.drop('bio')
-	spark_user = h.convert_bigint_to_int(spark_user)
+	print(usr_data.transpose())	
+		
+	spark_user = pandas_to_spark(usr_data)
 
 	model = get_user_specific_model(spark_user)
 	predictions = get_predict_dict(spark_user, model)
@@ -80,6 +129,26 @@ def data_page():
 							addBlog=predictions['probability3'],
 							addAllThree=predictions['probability4'])
 
+# -------------------------------------------------
+# -------------------------------------------------
+def predict_users(data, model, all_data):	
+	# run the model		
+	
+	data = data.withColumn("second_period_event_count", 
+		data.second_period_event_count.cast(DoubleType())
+		)
+	pipelineModel = pipeline.fit(data)
+	usr_data = pipelineModel.transform(data)
+
+	prediction = model.transform(usr_data)
+	prediction = prediction.select(['login', 'probability',
+									'prediction']).toPandas()
+	
+	prediction['probability'] = prediction.probability.apply(lambda x: x[1])
+
+	all_data += [prediction]
+	return all_data
+
 
 def get_user_specific_model(spark_user, userIndex=0):
 	spark_user = h.create_KMeans_features(spark_user)
@@ -91,7 +160,7 @@ def get_user_specific_model(spark_user, userIndex=0):
 		print('model = LRmodelCompany')
 		model = LRmodelCompany
 	else:
-		if spark_df.iloc[userIndex].high_low_use:
+		if spark_df.iloc[userIndex].high_low_user:
 			print('model = LRmodelHigh')
 			model = LRmodelHigh
 		else:
@@ -99,6 +168,21 @@ def get_user_specific_model(spark_user, userIndex=0):
 			model = LRmodelLow
 
 	return model
+
+
+def pandas_to_spark(usr_data, drop_bio=True):
+	#if drop_bio:
+	#	usr_data = usr_data.drop(columns=['bio'])
+	print('----------here---------')
+	print(usr_data.bio) 
+	spark_user = spark.createDataFrame(usr_data)		
+	print('----------here2---------')	
+	spark_user = h.convert_bigint_to_int(spark_user)
+	spark_user = h.add_date_info_spark(spark_user, convert=False)
+	spark_user = spark_user.withColumn('recency', F.log(spark_user.recency + 1))
+	#print(spark_user.head())
+	return spark_user
+
 
 def get_predict_dict(spark_user, model):
 	print(spark_user)
