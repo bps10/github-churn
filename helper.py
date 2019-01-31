@@ -22,46 +22,23 @@ count_columns =  ['CommitCommentEvent_count', 'CreateEvent_count', 'DeleteEvent_
                   'PushEvent_count', 'ReleaseEvent_count', 'WatchEvent_count']
     
 scale_columns = ['followers_count', 'following_count',
-                'public_repos_count', 'public_gists_count', 'recency']    
+                'public_repos_count', 'public_gists_count', 'frequency']    
 
 
-def create_KMeans_features(df):
-    df = df.withColumn('non_passive_events',
-                         F.log(df.frequency -
-                               (df.DeleteEvent_count + 
-                                df.GollumEvent_count +
-                                df.IssueCommentEvent_count +
-                                df.MemberEvent_count +
-                                df.WatchEvent_count) + 1)
-                        )
-
-    df = df.withColumn('public_repos_gists',
-        F.log(df.public_repos_count + df.public_gists_count) + 1)
-
-    # Assemble pipeline
-    stages = [VectorAssembler(inputCols=['non_passive_events', 'public_repos_gists'], 
-                                outputCol="KMeans_features").setHandleInvalid("skip")]
-
-    pipeline = Pipeline(stages = stages)
-    pipelineModel = pipeline.fit(df)
-    df = pipelineModel.transform(df)
-    #selectedCols = ['label', 'features']
-    #churn_data = churn_data.select(selectedCols)
-    #churn_data.printSchema()
-    return df
-
-def process_raw_df(df):
+def pandas_fill_na(df, last_event_fill='2018-08-01 01:00:00'):
     '''Process a raw pandas df
     '''
+    df = df.rename(index=str, columns={"event_count": "frequency"})
     # 2. Add recency
-    df = add_recency_column(df)    
+    #df = add_time_columns(df)    
     # 1. Handle NaN
     df[count_columns] = df[count_columns].fillna(0)
-    df[scale_columns] = df[scale_columns].fillna(0)    
+    df[scale_columns] = df[scale_columns].fillna(0)  
+    df['last_event'] = df.last_event.fillna(pd.to_datetime(last_event_fill))  
+    df['first_event'] = df.first_event.fillna(pd.to_datetime(last_event_fill))  
     # 3. Feature scaling.
-    df = feature_scaling(df)
-    # 4. Rename event_data
-    df = df.rename(index=str, columns={"event_count": "frequency"})
+    #df = feature_scaling(df)
+    # 4. Rename event_data    
 
     return df
 
@@ -83,96 +60,56 @@ def feature_scaling(df):
             df = df.withColumn(col, F.log(df[col] + 1))
         for col in scale_columns:
             df = df.withColumn(col, F.log(df[col] + 1))
+        # Scale recency
+        df = df.withColumn('recency', F.log(df.recency + 1))
+        
     else:
         df[count_columns] = df[count_columns].apply(lambda x: np.log(x + 1))
         df[scale_columns] = df[scale_columns].apply(lambda x: np.log(x + 1))
+        df['recency'] = df['recency'].apply(lambda x: np.log(x + 1))
 
     return df
 
 
-def add_high_low_flag(_data):
-    high_low_classifier = KMeansModel.load('KMeans_model')
-    # add high-low predictions
-    _data = _data.withColumn('non_passive_events',
-                             F.log(_data.frequency -
-                                   (_data.DeleteEvent_count + 
-                                    _data.GollumEvent_count +
-                                    _data.IssueCommentEvent_count +
-                                    _data.MemberEvent_count +
-                                    _data.WatchEvent_count) + 1)
+def create_KMeans_features(df, original=True):
+    if original:
+        df = df.withColumn('non_passive_events',
+                            F.log(df.frequency -
+                                (df.DeleteEvent_count + 
+                                    df.GollumEvent_count +
+                                    df.IssueCommentEvent_count +
+                                    df.MemberEvent_count +
+                                    df.WatchEvent_count + 1))
                             )
 
-    _data = _data.withColumn('public_repos_gists',
-                             F.log(_data.public_repos_count + _data.public_gists_count) + 1)
+        df = df.withColumn('public_repos_gists',
+            F.log(df.public_repos_count + df.public_gists_count + 1))
 
-    stages = [VectorAssembler(inputCols=['non_passive_events', 'public_repos_gists'], 
-                                outputCol="KMeans_features").setHandleInvalid("skip")]
+        # Assemble pipeline
+        stages = [VectorAssembler(inputCols=['non_passive_events', 'public_repos_gists'], 
+                                    outputCol="KMeans_features").setHandleInvalid("skip")]
+    else:
+        # Assemble pipeline
+        stages = [VectorAssembler(inputCols=['frequency', 'recency'], 
+                                    outputCol="KMeans_features").setHandleInvalid("skip")]        
 
     pipeline = Pipeline(stages = stages)
-    pipelineModel = pipeline.fit(_data)
-    _data = pipelineModel.transform(_data)
+    pipelineModel = pipeline.fit(df)
+    df = pipelineModel.transform(df)
+    #selectedCols = ['label', 'features']
+    #churn_data = churn_data.select(selectedCols)
+    #churn_data.printSchema()
+    return df
+
+def add_high_low_flag(_data, original_features=True):
+
+    # Add features
+    _data = create_KMeans_features(_data, original=original_features)
+    # add high-low predictions
+    high_low_classifier = KMeansModel.load('KMeans_model')
     _data = high_low_classifier.transform(_data)
+
     return _data
-
-
-def get_contributors(gh, owner, repo):
-    repo = gh.repository(owner, repo)
-    return [[contributor.login, contributor.contributions] for contributor in repo.contributors()]
-
-
-def create_query_from_list(user_list):
-    '''
-    '''
-    txt = (
-    """
-    SELECT  
-          actor.login,
-          COUNT(type) as event_count, 
-          MAX(created_at) as last_event, 
-          MIN(created_at) as first_event,
-          SUM(CASE WHEN type = 'CommitCommentEvent' then 1 else 0 end) as CommitCommentEvent_count,
-          SUM(CASE WHEN type = 'CreateEvent' then 1 else 0 end) as CreateEvent_count,
-          SUM(CASE WHEN type = 'DeleteEvent' then 1 else 0 end) as DeleteEvent_count,
-          SUM(CASE WHEN type = 'ForkEvent' then 1 else 0 end) as ForkEvent_count,
-          SUM(CASE WHEN type = 'GollumEvent' then 1 else 0 end) as GollumEvent_count,
-          SUM(CASE WHEN type = 'IssueCommentEvent' then 1 else 0 end) as IssueCommentEvent_count,
-          SUM(CASE WHEN type = 'IssuesEvent' then 1 else 0 end) as IssuesEvent_count,
-          SUM(CASE WHEN type = 'MemberEvent' then 1 else 0 end) as MemberEvent_count,
-          SUM(CASE WHEN type = 'PublicEvent' then 1 else 0 end) as PublicEvent_count,
-          SUM(CASE WHEN type = 'PullRequestEvent' then 1 else 0 end) as PullRequestEvent_count,
-          SUM(CASE WHEN type = 'PullRequestReviewCommentEvent' then 1 else 0 end) as PullRequestReviewCommentEvent_count,
-          SUM(CASE WHEN type = 'PushEvent' then 1 else 0 end) as PushEvent_count,
-          SUM(CASE WHEN type = 'ReleaseEvent' then 1 else 0 end) as ReleaseEvent_count,
-          SUM(CASE WHEN type = 'WatchEvent' then 1 else 0 end) as WatchEvent_count
-
-    FROM (
-      SELECT public, type, repo.name, actor.login, created_at,
-        JSON_EXTRACT(payload, '$.action') as event, 
-      FROM (TABLE_DATE_RANGE([githubarchive:day.] , 
-        TIMESTAMP('2018-08-01'), 
-        TIMESTAMP('2018-12-31')
-      ))
-      )
-  
-    WHERE (actor.login = '""")
-
-    end = ("""' AND public)
-    GROUP by actor.login;
-
-    """)
-
-    nusers = len(user_list)
-    for i, user in enumerate(user_list):
-        if i < nusers - 1:
-            txt += user + """' OR actor.login = '""" 
-        else:
-            txt += user + end
-    return txt
-
-
-def get_gh_credentials():
-    f = open('gh-password.txt', 'r') 
-    return f.read()[:-1]
 
 
 def eval_metrics(prediction, label=None):
@@ -195,33 +132,31 @@ def eval_metrics(prediction, label=None):
     print('F1-score:  {0}'.format(np.round(f1score, 4)))
 
 
-def add_recency_column(df):
-    
-    df['created_at'] = pd.to_datetime(df.created_at[:10], errors='coerce')
-    df['last_event'] = pd.to_datetime(df.last_event[:10], errors='coerce')    
-    df['recency'] = (df.last_event - df.created_at)  / pd.Timedelta(days = 1)    
-    return df
-
-
 def add_time_columns(df, end_date='2016-06-01 23:59:59+00:00'):
+
+    df['last_event'] = pd.to_datetime(df.last_event, errors='coerce')
+    try:
+        df['last_event'] = df['last_event'].dt.tz_localize('utc').dt.tz_convert('US/Central')
+    except:    
+        df['last_event'] = df['last_event'].dt.tz_convert('US/Central')       
+
+    df['created_at'] = pd.to_datetime(df.created_at, errors='coerce')
+    try:
+        df['created_at'] = df['created_at'].dt.tz_localize('utc').dt.tz_convert('US/Central')
+    except:    
+        df['created_at'] = df['created_at'].dt.tz_convert('US/Central')       
+
+    df['first_event'] = pd.to_datetime(df.first_event, errors='coerce')
+    try:
+        df['first_event'] = df['first_event'].dt.tz_localize('utc').dt.tz_convert('US/Central')
+    except:    
+        df['first_event'] = df['first_event'].dt.tz_convert('US/Central')       
     
-    df['created_at'] = pd.to_datetime(df.created_at[:10], errors='coerce')
-    df['last_event'] = pd.to_datetime(df.last_event[:10], errors='coerce')
-    df['first_event'] = pd.to_datetime(df.first_event[:10], errors='coerce')
-    
-    end_date = pd.to_datetime(end_date[:10])    
+    end_date = pd.to_datetime(end_date).tz_localize('utc').tz_convert('US/Central') 
     df['T'] = np.round((end_date - df.created_at) / pd.Timedelta(days = 1))
     df['recency'] = (df.last_event - df.created_at)  / pd.Timedelta(days = 1)
     df['time_between_first_last_event'] = (df.last_event - df.first_event) / pd.Timedelta(days = 1)
     return df
-
-
-def write_tree_to_file(tree, filename):
-    fullfile = os.path.join("trees", filename + ".txt")
-    text_file = open(fullfile, "w")
-    text_file.write(tree)
-    text_file.close()
-    print('Saved to fullfile')
 
 
 def add_date_info_spark(df, convert=True):
@@ -241,6 +176,20 @@ def add_date_info_spark(df, convert=True):
                                                            df.created_at))
     df = df.withColumn("time_between_first_last_event", 
                                    datediff(df.last_event, df.first_event))
+    
+    return df
+
+
+def convert_bigint_to_int(df):
+    for col, t in df.dtypes:
+        if t == 'bigint':
+            df = df.withColumn(col, df[col].cast(IntegerType()))
+            
+    f_udf=udf.UserDefinedFunction(lambda x: 1 if x is not None else 0, IntegerType())
+    df = df.withColumn("blog", f_udf(df.blog))
+    df = df.withColumn("company", f_udf(df.company))
+    df = df.withColumn("hireable", f_udf(df.hireable))
+    
     return df
 
     
@@ -418,17 +367,72 @@ def get_user_events(user, bigquery, client):
     return df
 
 
-def convert_bigint_to_int(df):
-    for col, t in df.dtypes:
-        if t == 'bigint':
-            df = df.withColumn(col, df[col].cast(IntegerType()))
-            
-    f_udf=udf.UserDefinedFunction(lambda x: 1 if x is not None else 0, IntegerType())
-    df = df.withColumn("blog", f_udf(df.blog))
-    df = df.withColumn("company", f_udf(df.company))
-    df = df.withColumn("hireable", f_udf(df.hireable))
-    
-    return df
+def create_query_from_list(user_list):
+    '''
+    '''
+    txt = (
+    """
+    SELECT  
+          actor.login,
+          COUNT(type) as event_count, 
+          MAX(created_at) as last_event, 
+          MIN(created_at) as first_event,
+          SUM(CASE WHEN type = 'CommitCommentEvent' then 1 else 0 end) as CommitCommentEvent_count,
+          SUM(CASE WHEN type = 'CreateEvent' then 1 else 0 end) as CreateEvent_count,
+          SUM(CASE WHEN type = 'DeleteEvent' then 1 else 0 end) as DeleteEvent_count,
+          SUM(CASE WHEN type = 'ForkEvent' then 1 else 0 end) as ForkEvent_count,
+          SUM(CASE WHEN type = 'GollumEvent' then 1 else 0 end) as GollumEvent_count,
+          SUM(CASE WHEN type = 'IssueCommentEvent' then 1 else 0 end) as IssueCommentEvent_count,
+          SUM(CASE WHEN type = 'IssuesEvent' then 1 else 0 end) as IssuesEvent_count,
+          SUM(CASE WHEN type = 'MemberEvent' then 1 else 0 end) as MemberEvent_count,
+          SUM(CASE WHEN type = 'PublicEvent' then 1 else 0 end) as PublicEvent_count,
+          SUM(CASE WHEN type = 'PullRequestEvent' then 1 else 0 end) as PullRequestEvent_count,
+          SUM(CASE WHEN type = 'PullRequestReviewCommentEvent' then 1 else 0 end) as PullRequestReviewCommentEvent_count,
+          SUM(CASE WHEN type = 'PushEvent' then 1 else 0 end) as PushEvent_count,
+          SUM(CASE WHEN type = 'ReleaseEvent' then 1 else 0 end) as ReleaseEvent_count,
+          SUM(CASE WHEN type = 'WatchEvent' then 1 else 0 end) as WatchEvent_count
+
+    FROM (
+      SELECT public, type, repo.name, actor.login, created_at,
+        JSON_EXTRACT(payload, '$.action') as event, 
+      FROM (TABLE_DATE_RANGE([githubarchive:day.] , 
+        TIMESTAMP('2018-08-01'), 
+        TIMESTAMP('2018-12-31')
+      ))
+      )
+  
+    WHERE (actor.login = '""")
+
+    end = ("""' AND public)
+    GROUP by actor.login;
+
+    """)
+
+    nusers = len(user_list)
+    for i, user in enumerate(user_list):
+        if i < nusers - 1:
+            txt += user + """' OR actor.login = '""" 
+        else:
+            txt += user + end
+    return txt
+
+
+def get_gh_credentials():
+    f = open('gh-password.txt', 'r') 
+    return f.read()[:-1]
+
+
+def get_contributors(gh, owner, repo):
+    repo = gh.repository(owner, repo)
+    return [[contributor.login, contributor.contributions] for contributor in repo.contributors()]
+
+
+def write_tree_to_file(tree, filename):
+    fullfile = os.path.join("trees", filename + ".txt")
+    text_file = open(fullfile, "w")
+    text_file.write(tree)
+    text_file.close()
+    print('Saved to fullfile')
 
 
 if __name__ == '__main__':
