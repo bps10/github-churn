@@ -133,3 +133,8 @@ From [StackOverflow](https://stackoverflow.com/questions/44368263/install-google
 1. `conda list --explicit > spec-file.txt`
 2. spc 
 3. `conda create --name myenv --file spec-file.txt`
+
+
+## Bugs
+
+[Port already in user](https://stackoverflow.com/questions/34457981/trying-to-run-flask-app-gives-address-already-in-use)
