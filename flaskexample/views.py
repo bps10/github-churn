@@ -87,7 +87,7 @@ def index():
 def data_page():	
 	username_exists = False
 	if 'username' in request.form:
-		username = request.form['username']
+		username = request.form['username'].replace(' ', '')
 		username_exists = True
 	try:		
 		user_profile = h.get_user_info(gh, username)		
@@ -96,7 +96,7 @@ def data_page():
 
 	reponame_exists = False
 	try:		
-		reponame = request.form.get('reponame')
+		reponame = request.form.get('reponame').replace(' ',  '')
 		reponame_exists = True
 		print(reponame)
 	except:

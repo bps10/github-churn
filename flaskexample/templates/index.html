@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+    <style>
+
+
+    h2 {
+    fill: none;
+    color: #222;
+    shape-rendering: crispEdges;
+    }
+    h4 {
+    fill: none;
+    color: #222;
+    shape-rendering: crispEdges;
+    }    
+
+    h5 {
+    fill: none;
+    color: #222;
+    shape-rendering: crispEdges;
+    }
+
+    #name {
+    fill: none;
+    color: steelblue;
+    shape-rendering: crispEdges;
+    }
+
+    </style>
+    <title>GitHub churn</title>
+</head>
+
+<div class="container">
+    <div class="jumbotron">
+      <h1>CodeChurn: Keeping open source projects active </h1> 
+      <h4>Discover, engage, contribute.</h4> 
+    </div>
+
+<br>
+<div class="row" margin-left="5pt">
+    <div class="col-sm-7">
+        
+        <h2>Individual users </h2>
+        <p>Enter username to see if he/she is likely to make future contributions.</p> 
+        
+        <form method="POST">
+            <input name="username" placeholder="username">
+            <input type="submit">
+        </form>
+        {% if username_exists %}        
+        <br>
+
+        <h4> <i id='name'>{{ name }}</i> will <u>{{ prediction.stay_or_go0 }}</u> over the next 5 months
+             with a probability of {{ prediction.probability0 }} </h4>
+        <br>
+        <h5>What can you do to ensure that {{ name }} remains active?</h5>
+        <br>
+        <ul>
+        <li> Follow <i id='name'>{{ name }}</i> and probability becomes {{ prediction.probability1 }} </li>
+        <li> Encourage <i id='name'>{{ name }}</i> to watch a new repo and probability changes to {{ prediction.probability2 }} </li>
+        <li> Convince <i id='name'>{{ name }}</i> to start a blog and probability changes to {{ prediction.probability3 }} </li>
+        <li> <i id='name'>{{ name }}</i> will {{ prediction.stay_or_go4 }} (p={{ prediction.probability4 }}) if you do <b>all three</b>. </li>
+        </ul>
+
+        <br>
+        <h5> <i id='name'>{{ name }}</i> currently has: </h5>
+        <ul>
+            <li> {{ user_profile.followers_count }} followers. </li>
+            <li> Follows {{ user_profile.following_count }} other users. </li>
+        </ul>                
+        {% else %}   
+        <!--
+    <h3> {{ name }} does not exist. </h3> -->
+        {% endif %}
+
+    </div>
+    <div class="col-sm-5">
+        <h2>Analyze repos</h2>
+        <p>Select a popular open source repo.</p>         
+        <form method="POST">            
+            <select name="reponame" method="GET" action="/">                
+                {% for repo in repos %}
+                {% if repo == reponame %}
+                    <option value= "{{ repo }}" SELECTED>{{ repo }}</option>"
+                {% else %}
+                    <option value= "{{ repo }}">{{ repo }}</option>"
+                {% endif %}
+                {% endfor %}
+            </select>
+            <!---<input name="reponame" placeholder="reponame">-->
+            <input type="submit">
+        </form>
+        {% if reponame_exists %}
+        <br>
+
+        <!-- import plugin script -->           
+        <!-- bar chart canvas element -->
+        <canvas id="chart" width="300" height="300"></canvas>
+        <script src="static/Chart.min.js"></script>
+        <script>
+            
+        // bar chart data<br />
+        var barData = {
+        labels : [{% for item in labels %}
+                        "{{item}}",
+                    {% endfor %}],
+        datasets : [
+            {
+                fillColor: "rgba(151,187,205,1)",
+                strokeColor: "rgba(151,187,205,1)",
+                pointColor: "rgba(151,187,205,1)",
+                data : [
+                    {% for item in values %}
+                    {{ item }},
+                    {% endfor %}
+                        ]
+            }
+            ]
+        } 
+            // get bar chart canvas
+        var mychart = document.getElementById("chart").getContext("2d");
+        steps = 10
+        max = 1
+        // draw bar chart
+        new Chart(mychart).Bar(barData, {
+                //scaleOverride: true,
+                scaleSteps: steps,
+                scaleStepWidth: Math.ceil(max / steps),
+                scaleStartValue: 0,
+                scaleShowVerticalLines: false,
+                scaleShowGridLines : false,
+                barShowStroke : true,
+                scaleShowLabels: true
+        });
+        </script>
+
+        <div class="row">
+                <div class="col-sm-7">
+        <table class="table">
+        {% for table in tables %}
+                    {{titles[loop.index]}}
+                    {{ table|safe }}
+        {% endfor %}
+        </table>
+        </div>
+        <div class="col-sm-8"></div>
+        </div>
+        {% endif %}
+
+    </div>
+
+  </div>
+
+</div>

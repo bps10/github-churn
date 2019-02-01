@@ -104,3 +104,32 @@ for old in *; do mv $old `basename $old `.csv; done;
 pip install eurekatrees
 ```
 eurekatrees --trees ./trees/rf_tree.txt 
+
+
+## Installing Google Cloud SDK and PySpark on EC2
+
+From [StackOverflow](https://stackoverflow.com/questions/44368263/install-google-cloud-sdk-on-aws-ec2):
+
+1. `curl https://sdk.cloud.google.com | bash` 
+2. restart shell: `exec -l $SHELL`
+3. Copy pem file: `scp -i <keypair> myfile.txt ubuntu@ec2-x-x-x.com:` The colon at the end will ensure that it is copied to the home directory. Specify other locations directly after ec2-x-x-x.com/path/to/dir/. 
+4. link account: `gcloud auth activate-service-account --key-file=$PATH TO KEY FILE` 
+5. `gcloud init` (please make proper selection as per your requirement).
+6. Install python 2.7 if not already present: `sudo apt install python2.7`
+7. After above steps try running gsutil ls OR bq ls command and see if buckets and datasets are listed properly.
+8. `pip install google-cloud-storage`
+
+## Pyspark on EC2
+
+[Instructions](https://medium.com/@josemarcialportilla/getting-spark-python-and-jupyter-notebook-running-on-amazon-ec2-dec599e1c297)
+
+## Conda virtual env:
+
+ Install: 
+ 1. `wget https://repo.continuum.io/archive/Anaconda3-5.0.1-Linux-x86_64.sh`
+ 2.  `bash Anaconda3-5.0.1-Linux-x86_64.sh`
+ 
+
+1. `conda list --explicit > spec-file.txt`
+2. spc 
+3. `conda create --name myenv --file spec-file.txt`

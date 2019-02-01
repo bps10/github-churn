@@ -3,8 +3,8 @@ import numpy as np
 import pandas as pd
 import os
 
-from pyspark.sql import SparkSession, udf, DataFrame
-from pyspark.sql.functions import to_timestamp, datediff
+from pyspark.sql import SparkSession, DataFrame
+#import pyspark.sql.functions #import to_timestamp, datediff
 from pyspark.sql.types import IntegerType, FloatType, DoubleType, BooleanType, StringType
 from pyspark.sql import functions as F
 from pyspark.ml.clustering import KMeansModel
@@ -165,19 +165,19 @@ def add_date_info_spark(df, convert=True):
     '''Take a spark df and add date info
     '''
     if convert:
-        f_datestring=udf.UserDefinedFunction(lambda x: x[:-4] + '+00:00', StringType())
+        f_datestring=F.UserDefinedFunction(lambda x: x[:-4] + '+00:00', StringType())
         df = df.withColumn("first_event", f_datestring(df.first_event))
         df = df.withColumn("last_event", f_datestring(df.last_event))
 
-    df = df.withColumn("first_event", to_timestamp(df.first_event))
-    df = df.withColumn("last_event", to_timestamp(df.last_event))
-    df = df.withColumn("created_at", to_timestamp(df.created_at))
-    df = df.withColumn("updated_at", to_timestamp(df.updated_at))
+    df = df.withColumn("first_event", F.to_timestamp(df.first_event))
+    df = df.withColumn("last_event", F.to_timestamp(df.last_event))
+    df = df.withColumn("created_at", F.to_timestamp(df.created_at))
+    df = df.withColumn("updated_at", F.to_timestamp(df.updated_at))
     
-    df = df.withColumn("recency", datediff(df.last_event, 
+    df = df.withColumn("recency", F.datediff(df.last_event, 
                                                            df.created_at))
     df = df.withColumn("time_between_first_last_event", 
-                                   datediff(df.last_event, df.first_event))
+                                   F.datediff(df.last_event, df.first_event))
     
     return df
 
@@ -187,7 +187,7 @@ def convert_bigint_to_int(df):
         if t == 'bigint':
             df = df.withColumn(col, df[col].cast(IntegerType()))
             
-    f_udf=udf.UserDefinedFunction(lambda x: 1 if x is not None else 0, IntegerType())
+    f_udf=F.UserDefinedFunction(lambda x: 1 if x is not None else 0, IntegerType())
     df = df.withColumn("blog", f_udf(df.blog))
     df = df.withColumn("company", f_udf(df.company))
     df = df.withColumn("hireable", f_udf(df.hireable))
@@ -232,7 +232,7 @@ def get_merged_data(appName='gh-churn', year='2016'):
     churn_data = churn_data.withColumn("following_count", 
                                        churn_data.following_count.cast(IntegerType()))
     
-    f_udf=udf.UserDefinedFunction(lambda x: 1 if x is not None else 0, IntegerType())
+    f_udf=F.UserDefinedFunction(lambda x: 1 if x is not None else 0, IntegerType())
 
     churn_data = churn_data.withColumn("blog", f_udf(churn_data.blog))
     churn_data = churn_data.withColumn("company", f_udf(churn_data.company))
