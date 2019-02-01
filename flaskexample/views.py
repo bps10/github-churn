@@ -14,7 +14,7 @@ from pyspark.ml.linalg import SparseVector
 from pyspark.sql import functions as F
 
 from github3 import login
-from lifetimes import BetaGeoFitter
+#from lifetimes import BetaGeoFitter
 import helper as h
 
 from google.cloud import bigquery
@@ -37,42 +37,39 @@ pipeline = Pipeline.load('pipeline')
 print('-----Pipeline loaded-----')
  
 pop_repos = pd.read_pickle('popular_repos.pickle')
-pop_repos['last_event'] = pop_repos.last_event.astype(str)
-pop_repos['first_event'] = pop_repos.first_event.astype(str)
-pop_repos = h.pandas_fill_na(pop_repos, last_event_fill='2018-08-01 01:00:00')
+pop_repos = h.pandas_fill_na(pop_repos, last_event_fill='2018-08-01 01:00:00+00:00')
 print(pop_repos[['first_event', 'last_event']])
 
-pop_repos = pop_repos.drop(columns=['actor_login'])
+pop_repos = pop_repos.drop(columns=['actor_login', 'bio'])
 repos = pop_repos.repo.unique()
 
 # Load CVL model
-CLV_model = BetaGeoFitter()
-CLV_model.load_model('CLV.pkl')
+#CLV_model = BetaGeoFitter()
+#CLV_model.load_model('CLV.pkl')
 
 #@app.route('/repo', methods=("POST", "GET"))
 def html_table(reponame):
-	#reponame = 'matplotlib'
 	contributors = pop_repos[pop_repos.repo == reponame]
 	print('++++ {0} contributors to {1} ++++'.format(len(contributors), reponame))
 	
 	contributors['second_period_event_count'] = np.zeros(len(contributors))
 	contributors = pandas_to_spark(contributors)	
 
-	if reponame == 'matplotlib':
-		print(pop_repos[pop_repos.login == 'meeseeksmachine'].transpose())
+	if reponame == 'scipy':
+		contributors_df = contributors.toPandas()
+		print(contributors_df[contributors_df.login == 'Konrad0'].transpose())
 
 	company_users = contributors[contributors.company == 1]
-	high_users = contributors[contributors.high_low_user == 1]
-	low_users = contributors[contributors.high_low_user == 0]
-
-	all_data = []
-	all_data = predict_users(company_users, LRmodelCompany, all_data)
-	all_data = predict_users(high_users, LRmodelHigh, all_data)
-	all_data = predict_users(low_users, LRmodelLow, all_data)
-
-	print(all_data)
+	high_users = contributors[(contributors.company == 0) & (contributors.high_low_user == 1)]
+	low_users = contributors[(contributors.company == 0) & (contributors.high_low_user == 0)]
+	
+	company_users_prediction = predict_users(company_users, LRmodelCompany)
+	high_users_prediction = predict_users(high_users, LRmodelHigh)
+	low_users_prediction = predict_users(low_users, LRmodelLow)
+	
 	# sort the data based on probability	
-	all_data = pd.concat(all_data)
+	all_data = pd.concat([company_users_prediction, high_users_prediction, low_users_prediction])
+	print('************* N data points: {0}'.format(len(all_data)))
 
 	all_data = all_data.sort_values(by='probability', ascending=True)
 	all_data = all_data.round({'probability': 4}).set_index('login')
@@ -113,7 +110,7 @@ def data_page():
 
 		usr_data = user_profile_df.join(event_data)
 		usr_data['second_period_event_count'] = [0]	
-		usr_data = h.pandas_fill_na(usr_data, last_event_fill='2018-08-01 01:00:00')
+		usr_data = h.pandas_fill_na(usr_data, last_event_fill='2018-08-01 01:00:00+00:00')
 		print(usr_data.transpose())	
 			
 		spark_user = pandas_to_spark(usr_data)
@@ -132,7 +129,8 @@ def data_page():
 
 	elif reponame_exists:
 
-		all_data = html_table(reponame)		
+		all_data = html_table(reponame)
+
 		hist_vals, edges = np.histogram(all_data.probability, bins=10, range=[0, 1])
 		labels = np.round(np.arange(0.1, 1.1, 0.1), 1)
 		all_data = all_data[:25]
@@ -171,7 +169,7 @@ def predict_single_user(data, model):
 	return stay_or_go, probability
 
 
-def predict_users(data, model, all_data):	
+def predict_users(data, model):	
 	# run the model		
 	
 	data = data.withColumn("second_period_event_count", 
@@ -185,14 +183,13 @@ def predict_users(data, model, all_data):
 	
 	prediction['probability'] = prediction.probability.apply(lambda x: x[1])
 
-	all_data += [prediction]
-	return all_data
+	return prediction
 
 
 def get_user_specific_model(spark_user, userIndex=0):
 	spark_df = spark_user.toPandas()	
 	print('-------------IN get_user_specific_model --------')
-	print(spark_df)
+	print(spark_df.transpose())
 	if spark_df.iloc[userIndex].company:
 		print('model = LRmodelCompany')
 		model = LRmodelCompany
@@ -208,14 +205,14 @@ def get_user_specific_model(spark_user, userIndex=0):
 
 
 def pandas_to_spark(usr_data):	
-	print(usr_data.bio.transpose()) 	
-	spark_user = spark.createDataFrame(usr_data)			
-	spark_user = h.convert_bigint_to_int(spark_user)
+	print(len(usr_data))
+	spark_user = spark.createDataFrame(usr_data)	
+	spark_user = h.convert_bigint_to_int(spark_user)	
 	spark_user = h.add_date_info_spark(spark_user, convert=False)	
-	spark_user = h.feature_scaling(spark_user)
-	spark_user = h.create_KMeans_features(spark_user)
-	spark_user = KMmodel.transform(spark_user)	
-	
+	spark_user = h.feature_scaling(spark_user)	
+	spark_user = h.create_KMeans_features(spark_user, False)
+	print(spark_user.count())
+	spark_user = KMmodel.transform(spark_user)		
 	return spark_user
 
 

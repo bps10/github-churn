@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import matplotlib.pylab as plt
 import pandas as pd
 import os
 
@@ -34,8 +33,8 @@ def pandas_fill_na(df, last_event_fill='2018-08-01 01:00:00'):
     # 1. Handle NaN
     df[count_columns] = df[count_columns].fillna(0)
     df[scale_columns] = df[scale_columns].fillna(0)  
-    df['last_event'] = df.last_event.fillna(pd.to_datetime(last_event_fill))  
-    df['first_event'] = df.first_event.fillna(pd.to_datetime(last_event_fill))  
+    df['last_event'] = df.last_event.fillna(pd.Timestamp(last_event_fill))  
+    df['first_event'] = df.first_event.fillna(pd.Timestamp(last_event_fill))  
     # 3. Feature scaling.
     #df = feature_scaling(df)
     # 4. Rename event_data    
@@ -126,6 +125,9 @@ def eval_metrics(prediction, label=None):
     recall = TP / (TP + FN)
     accuracy = (TP + TN) / (TP + FP + FN + TN)
     f1score = 2 * (precision * recall) /  (precision + recall)
+    print("TP, FN | FP, TN")
+    print("{0}, {1} | {2}, {3}".format(TP, FN, FP, TN))
+    print('---------------------------')
     print('Precision: {0}'.format(np.round(precision, 3)))
     print('Recall:    {0}'.format(np.round(recall, 3)))
     print('Accuracy:  {0}'.format(np.round(accuracy, 3)))
