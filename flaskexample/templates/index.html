@@ -59,16 +59,42 @@
         {% if username_exists %}        
         <br>
 
-        <h4> <i id='name'><a href='https://github.com/{{ name }}'>{{ name }}</a></i> will <u>{{ prediction.stay_or_go0 }}</u> over the next 5 months
-             with a probability of {{ prediction.probability0 }} </h4>
+        <h4> <i id='name'><a href='https://github.com/{{ name }}'>{{ name }}</a></i> will
+             <u>{{ prediction.nochange.stay_or_go }}</u> over the next 5 months
+             with a probability of {{ prediction.nochange.probability }} </h4>
         <br>
         <h5>What can you do to ensure that {{ name }} remains active?</h5>
         <br>
+
         <ul>
-        <li> Follow <i id='name'>{{ name }}</i> and probability becomes {{ prediction.probability1 }} </li>
-        <li> Encourage <i id='name'>{{ name }}</i> to watch a new repo and probability changes to {{ prediction.probability2 }} </li>
-        <li> Convince <i id='name'>{{ name }}</i> to start a blog and probability changes to {{ prediction.probability3 }} </li>
-        <li> <i id='name'>{{ name }}</i> will {{ prediction.stay_or_go4 }} (p={{ prediction.probability4 }}) if you do <b>all three</b>. </li>
+        {% if prediction.WatchEvent_count is not none %}
+            <li> Encourage <i id='name'>{{ name }}</i> to watch a new repo and probability changes 
+                to {{ prediction.WatchEvent_count.probability }}.</li>
+        {% endif %}
+        {% if prediction.followers_count is not none %}
+            <li> Follow <i id='name'>{{ name }}</i> and probability becomes 
+                {{ prediction.followers_count.probability }}. </li>
+        {% endif %}
+        {% if prediction.blog is not none %}
+            <li> Convince <i id='name'>{{ name }}</i> to start a blog and probability changes
+                 to {{ prediction.blog.probability }}. </li>
+        {% endif %}
+        {% if prediction.ForkEvent_count is not none %}
+            <li>Convince <i id='name'>{{ name }}</i> to <a href="https://help.github.com/articles/fork-a-repo/">
+                fork </a> a new repo and probability becomes
+            {{ prediction.ForkEvent_count.probability }}.</li>
+        {% endif %}
+        {% if prediction.following_count is not none %}
+            <li>Help <i id='name'>{{ name }}</i> find users to follow and probability becomes
+            {{ prediction.following_count.probability }} if following count increases by one.</li>
+        {% endif %} 
+        {% if prediction.IssueComment_Event is not none %}
+            <li>Suggest an issue to comment on and probability becomes
+            {{ prediction.IssueComment_Event.probability }}.</li>
+        {% endif %}
+        
+        <li> <i id='name'>{{ name }}</i> will {{ prediction.all.stay_or_go }} (p={{ prediction.all.probability }}) 
+            if you accomplish <b>all three</b>. </li>
         </ul>
 
         <br>
@@ -76,10 +102,12 @@
         <ul>
             <li> {{ user_profile.followers_count }} followers. </li>
             <li> Follows {{ user_profile.following_count }} other users. </li>
+            {% if user_profile.company is not none %}
+                <li> And is affiliated with {{ user_profile.company }}. </li>                
+            {% endif %}
         </ul>                
         {% else %}   
-        <!--
-    <h3> {{ name }} does not exist. </h3> -->
+            <!-- <h3> {{ name }} does not exist. </h3> -->
         {% endif %}
 
     </div>

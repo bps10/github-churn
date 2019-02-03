@@ -106,6 +106,8 @@ def data_page():
 		user_profile_df = pd.DataFrame(user_profile, index=[0])
 		user_profile_df = user_profile_df.fillna(0)
 
+		has_a_blog = 1 if user_profile_df.blog is not None else 0
+
 		event_data = h.get_user_events(username, bigquery, client)				
 
 		usr_data = user_profile_df.join(event_data)
@@ -114,8 +116,8 @@ def data_page():
 		print(usr_data.transpose())	
 			
 		spark_user = pandas_to_spark(usr_data)
-		model = get_user_specific_model(spark_user)
-		predictions = get_predict_suggestions(spark_user, model)
+		model, modelName = get_user_specific_model(spark_user)
+		predictions = get_predict_suggestions(spark_user, model, has_a_blog, modelName)
 
 		#print(CLV_model.fit([19], [50], [100]))
 
@@ -192,16 +194,19 @@ def get_user_specific_model(spark_user, userIndex=0):
 	print(spark_df.transpose())
 	if spark_df.iloc[userIndex].company:
 		print('model = LRmodelCompany')
+		modelName = 'LRmodelCompany'
 		model = LRmodelCompany
 	else:
 		if spark_df.iloc[userIndex].high_low_user:
 			print('model = LRmodelHigh')
+			modelName = 'LRmodelHigh'
 			model = LRmodelHigh
 		else:
 			print('model = LRmodelLow')
+			modelName = 'LRmodelLow'
 			model = LRmodelLow
 
-	return model
+	return model, modelName
 
 
 def pandas_to_spark(usr_data):	
@@ -216,38 +221,43 @@ def pandas_to_spark(usr_data):
 	return spark_user
 
 
-def get_predict_suggestions(spark_user, model):
-	print(spark_user)
+def get_predict_suggestions(spark_user, model, has_a_blog, modelName):
+
 	print('=======Predicting 1 =========')	
 	p = {}
-	p['stay_or_go0'], p['probability0'] = predict_single_user(spark_user, model)	
+	p = {'WatchEvent_count': None, 'followers_count': None, 'ForkEvent_count': None,
+		'following_count': None, 'IssueComment_Event': None, 'blog': None,}
+	p['nochange'] = {}
+	p['nochange']['stay_or_go'], p['nochange']['probability'] = predict_single_user(spark_user, model)	
 	
-	# add one follower and rerun model
-	print('=======Predicting 2 =========')		
-	new_data = spark_user.withColumn(
-	'followers_count', spark_user['followers_count'] + 1)
-	p['stay_or_go1'], p['probability1'] = predict_single_user(new_data, model)	
+	if modelName == 'LMmodelCompany':
+		fields = ['WatchEvent_count', 'followers_count', 'ForkEvent_count']
+	elif modelName == 'LMmodelLow':
+		if has_a_blog:
+			fields = ['following_count', 'followers_count', 'IssueComment_Event']			
+		else:
+			fields = ['blog', 'followers_count', 'IssueComment_Event']
+	else:
+		if has_a_blog:
+			fields = ['WatchEvent_count', 'followers_count', 'ForkEvent_count']
+		else:
+			fields = ['WatchEvent_count', 'blog', 'followers_count']
+	
+	for i, field in enumerate(fields):
+		print('=======Predicting {0} ========='.format(i + 1))
+		print(field)
+		new_data = spark_user.withColumn(field, spark_user[field] + 1)
+		p[field] = {}
+		p[field ]['stay_or_go'], p[field]['probability'] = predict_single_user(
+			new_data, model)
+		
+	new_data = spark_user.withColumn(fields[0], spark_user[fields[0]] + 1)
+	new_data = new_data.withColumn(fields[1], new_data[fields[1]] + 1)
+	new_data = new_data.withColumn(fields[2], new_data[fields[2]] + 1)
 
-	# add one follower and rerun model
-	print('=======Predicting 3 =========')
-	new_data = spark_user.withColumn(
-	'WatchEvent_count', spark_user['WatchEvent_count'] + 1)
-	p['stay_or_go2'], p['probability2'] = predict_single_user(new_data, model)	
-
-	# add one follower and rerun model
-	print('=======Predicting 4 =========')
-	new_data = spark_user.withColumn(
-	'blog', spark_user['blog'] + 1)
-	p['stay_or_go3'], p['probability3'] = predict_single_user(new_data, model)	
-
-	new_data = spark_user.withColumn(
-	'blog', spark_user['blog'] + 1)
-	new_data = new_data.withColumn(
-	'WatchEvent_count', new_data['WatchEvent_count'] + 1)
-	new_data = new_data.withColumn(
-	'followers_count', new_data['followers_count'] + 1)
-
-	p['stay_or_go4'], p['probability4'] = predict_single_user(new_data, model)
+	print('=======Predicting 5 ========='.format(i))		
+	p['all'] = {}
+	p['all']['stay_or_go'], p['all']['probability'] = predict_single_user(new_data, model)	
 	print(p)
 
 	return p
