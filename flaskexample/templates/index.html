@@ -34,6 +34,8 @@
     }
 
     </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.3/Chart.min.js"></script>
+
     <title>GitHub churn</title>
 </head>
 
@@ -57,7 +59,7 @@
         {% if username_exists %}        
         <br>
 
-        <h4> <i id='name'>{{ name }}</i> will <u>{{ prediction.stay_or_go0 }}</u> over the next 5 months
+        <h4> <i id='name'><a href='https://github.com/{{ name }}'>{{ name }}</a></i> will <u>{{ prediction.stay_or_go0 }}</u> over the next 5 months
              with a probability of {{ prediction.probability0 }} </h4>
         <br>
         <h5>What can you do to ensure that {{ name }} remains active?</h5>
@@ -103,19 +105,27 @@
         <!-- import plugin script -->           
         <!-- bar chart canvas element -->
         <canvas id="chart" width="300" height="300"></canvas>
-        <script src="static/Chart.min.js"></script>
         <script>
             
         // bar chart data<br />
+        steps = 10
+        max = 1    
         var barData = {
         labels : [{% for item in labels %}
                         "{{item}}",
                     {% endfor %}],
+        //scaleOverride: true,
+        scaleSteps: steps,
+        scaleStepWidth: Math.ceil(max / steps),
+        scaleStartValue: 0,
+        scaleShowVerticalLines: false,
+        scaleShowGridLines : false,
+        barShowStroke : true,
+        scaleShowLabels: true,                        
         datasets : [
             {
-                fillColor: "rgba(151,187,205,1)",
+                backgroundColor: "rgba(151,187,205,1)",
                 strokeColor: "rgba(151,187,205,1)",
-                pointColor: "rgba(151,187,205,1)",
                 data : [
                     {% for item in values %}
                     {{ item }},
@@ -125,19 +135,34 @@
             ]
         } 
             // get bar chart canvas
-        var mychart = document.getElementById("chart").getContext("2d");
-        steps = 10
-        max = 1
+        var ctx = document.getElementById("chart").getContext("2d");
+
         // draw bar chart
-        new Chart(mychart).Bar(barData, {
-                //scaleOverride: true,
-                scaleSteps: steps,
-                scaleStepWidth: Math.ceil(max / steps),
-                scaleStartValue: 0,
-                scaleShowVerticalLines: false,
-                scaleShowGridLines : false,
-                barShowStroke : true,
-                scaleShowLabels: true
+        var myChart = new Chart(ctx, {
+            type: 'bar',
+            data: barData,
+            options: {
+                legend: {
+                    display: false,
+            },
+            title: {
+                display: true,
+                text: 'Probability of {{ reponame }} contributors churning'
+            }, scales: {
+                yAxes: [{ 
+                scaleLabel: {
+                    display: true,
+                    labelString: "# of contributors"
+                }
+                }],
+                xAxes: [{ 
+                scaleLabel: {
+                    display: true,
+                    labelString: "probability"
+                }
+                }]
+            }
+            }
         });
         </script>
 
@@ -145,7 +170,7 @@
                 <div class="col-sm-7">
         <table class="table">
         {% for table in tables %}
-                    {{titles[loop.index]}}
+                    
                     {{ table|safe }}
         {% endfor %}
         </table>

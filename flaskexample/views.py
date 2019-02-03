@@ -51,9 +51,9 @@ repos = pop_repos.repo.unique()
 def html_table(reponame):
 	contributors = pop_repos[pop_repos.repo == reponame]
 	print('++++ {0} contributors to {1} ++++'.format(len(contributors), reponame))
-	
+
 	contributors['second_period_event_count'] = np.zeros(len(contributors))
-	contributors = pandas_to_spark(contributors)	
+	contributors = pandas_to_spark(contributors)
 
 	if reponame == 'scipy':
 		contributors_df = contributors.toPandas()
