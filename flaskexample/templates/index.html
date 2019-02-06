@@ -174,20 +174,30 @@
                     display: false,
             },
             title: {
+                fontSize: 20,
                 display: true,
-                text: 'Probability of {{ reponame }} contributors churning'
-            }, scales: {
+                text: '{{ reponame }} contributors'
+            }, 
+            scales: {
                 yAxes: [{ 
-                scaleLabel: {
-                    display: true,
-                    labelString: "# of contributors"
-                }
+                    scaleLabel: {
+                        fontSize: 20,
+                        display: true,
+                        labelString: "# of contributors"
+                    },
+                    ticks: {
+                        fontSize: 18,
+                    }
                 }],
                 xAxes: [{ 
-                scaleLabel: {
-                    display: true,
-                    labelString: "probability"
-                }
+                    scaleLabel: {
+                        fontSize: 20,
+                        display: true,
+                        labelString: "probability of staying active",
+                    },
+                    ticks: {
+                        fontSize: 18,
+                    }
                 }]
             }
             }
@@ -198,8 +208,7 @@
                 <div class="col-sm-7">
         <table class="table">
         {% for table in tables %}
-                    
-                    {{ table|safe }}
+            {{ table|safe }}
         {% endfor %}
         </table>
         </div>
