@@ -56,11 +56,11 @@ def feature_scaling(df):
     # scale remaining cols
     if isinstance(df, DataFrame):
         for col in count_columns:
-            df = df.withColumn(col, F.log(df[col] + 1))
+            df = df.withColumn(col, F.log(df[col].cast(DoubleType()) + 1))
         for col in scale_columns:
-            df = df.withColumn(col, F.log(df[col] + 1))
+            df = df.withColumn(col, F.log(df[col].cast(DoubleType()) + 1))
         # Scale recency
-        df = df.withColumn('recency', F.log(df.recency + 1))
+        df = df.withColumn('recency', F.log(df.recency.cast(DoubleType()) + 1))
         
     else:
         df[count_columns] = df[count_columns].apply(lambda x: np.log(x + 1))
