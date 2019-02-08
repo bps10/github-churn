@@ -36,7 +36,7 @@ def pandas_fill_na(df, last_event_fill='2018-08-01 01:00:00'):
     df['last_event'] = df.last_event.fillna(pd.Timestamp(last_event_fill))  
     df['first_event'] = df.first_event.fillna(pd.Timestamp(last_event_fill))  
     # 3. Feature scaling.
-    #df = feature_scaling(df)
+    #df = (df)
     # 4. Rename event_data    
 
     return df
@@ -195,14 +195,17 @@ def convert_bigint_to_int(df):
     return df
 
     
-def get_merged_data(appName='gh-churn', year='2016'):
+def get_merged_data(appName='gh-churn', year='2016', user_year=None):
     
     spark = SparkSession.builder.appName(appName).getOrCreate()
     first_period = spark.read.csv('events_data/events_' + year + '_01_01_' + year + '_06_01.csv', 
                                   header = True, inferSchema = True)    
     second_period = spark.read.csv('events_data/events_' + year + '_06_02_' + year + '_11_01.csv', 
                                    header = True, inferSchema = True)
-    users = spark.read.csv('user_data/all_users.csv', header=True, inferSchema=True)
+    if user_year == '2017':
+        users = spark.read.csv('user_data/all_users_2017.csv', header=True, inferSchema=True)
+    else:
+        users = spark.read.csv('user_data/all_users.csv', header=True, inferSchema=True)
     users = users.drop('event_count').drop('last_event').drop('first_event').drop('_c0')
     
     churn_data = users.join(first_period, users['login'] == first_period['actor'], 
@@ -221,7 +224,6 @@ def get_merged_data(appName='gh-churn', year='2016'):
     churn_data = churn_data.join(second_period_event_count,
                                  on='login', how='left')
     churn_data = churn_data.fillna(0, subset='second_period_event_count')
-
 
     churn_data = churn_data.withColumn("public_repos_count",
                                        churn_data.public_repos_count.cast(IntegerType()))
@@ -253,11 +255,12 @@ def get_merged_data(appName='gh-churn', year='2016'):
     
     # remove outliers with very high number of Events.
     n_event_threshold = 200 if year == '2016' else 600
+    print('Threshold events N: {0}'.format(n_event_threshold))
     n_total_users = churn_data.count()
     churn_data = churn_data.filter(churn_data.frequency < n_event_threshold)
     churn_data = churn_data.filter(churn_data.second_period_event_count < n_event_threshold)
     n_users = churn_data.count()    
-    print('% of users dropped {0}'.format(100 - (n_users / n_total_users * 100)))
+    print('% of users dropped {0}'.format(round(100 - (n_users / n_total_users * 100), 2)))
     
     return churn_data
 
@@ -307,7 +310,7 @@ def get_batch(gh, df, random_indexes, start_index, existing_users=set(),
                 # expected to fail if user has deleted profile, counts against rate limited api calls.
                 count += 1
                 i += 1
-                print(user.actor)
+                print([i, count, user.actor])
             
     return d, start_index + batch_size
 

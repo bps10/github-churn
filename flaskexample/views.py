@@ -152,7 +152,7 @@ def data_page():
 # -------------------------------------------------
 
 
-def predict_single_user(data, model):
+def predict_single_user(data, model, remain_active_flag = False):
 	data = data.withColumn("second_period_event_count", 
 		data.second_period_event_count.cast(DoubleType())
 		)
@@ -162,7 +162,7 @@ def predict_single_user(data, model):
 	prediction = model.transform(usr_data)
 	prediction = prediction.select(['probability',
 									'prediction']).collect()#[0][1]
-	if prediction[0][1] > 0.5:
+	if prediction[0][1] > 0.5 or remain_active_flag:
 		stay_or_go = 'remain active'
 		probability = str(round(prediction[0][0][1], 2))
 	else:
@@ -249,7 +249,7 @@ def get_predict_suggestions(spark_user, model, has_a_blog, modelName):
 		new_data = spark_user.withColumn(field, spark_user[field] + 1)
 		p[field] = {}
 		p[field ]['stay_or_go'], p[field]['probability'] = predict_single_user(
-			new_data, model)
+			new_data, model, True)
 		
 	new_data = spark_user.withColumn(fields[0], spark_user[fields[0]] + 1)
 	new_data = new_data.withColumn(fields[1], new_data[fields[1]] + 1)
@@ -257,7 +257,7 @@ def get_predict_suggestions(spark_user, model, has_a_blog, modelName):
 
 	print('=======Predicting 5 ========='.format(i))		
 	p['all'] = {}
-	p['all']['stay_or_go'], p['all']['probability'] = predict_single_user(new_data, model)	
+	p['all']['stay_or_go'], p['all']['probability'] = predict_single_user(new_data, model, True)	
 	print(p)
 
 	return p

@@ -60,7 +60,7 @@
         <br>
 
         <h4> <i id='name'><a href='https://github.com/{{ name }}'>{{ name }}</a></i> will
-             <u>{{ prediction.nochange.stay_or_go }}</u> over the next 5 months
+             remain active over the next 5 months
              with a probability of {{ prediction.nochange.probability }} </h4>
         <br>
         <h5>What can you do to ensure that {{ name }} remains active?</h5>
@@ -68,8 +68,8 @@
 
         <ul>
         {% if prediction.WatchEvent_count is not none %}
-            <li> Encourage <i id='name'>{{ name }}</i> to watch a new repo and probability changes 
-                to {{ prediction.WatchEvent_count.probability }}.</li>
+            <li> Encourage <i id='name'>{{ name }}</i> to watch a new repo and probability becomes 
+                {{ prediction.WatchEvent_count.probability }}.</li>
         {% endif %}
         {% if prediction.followers_count is not none %}
             <li> Follow <i id='name'>{{ name }}</i> and probability becomes 

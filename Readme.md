@@ -1,5 +1,45 @@
+# CodeChurn: Keeping open source projects active
 
-## Fetch Event data
+
+
+
+## Tech stack
+
+
+## Notes
+
+### SQL queries
+#### Count events as a function of month
+
+```sql
+SELECT  
+  COUNT(type) as event_count,
+  EXTRACT(MONTH FROM created_at) AS created_at
+
+FROM `githubarchive.year.2018`
+   
+WHERE (public)
+
+GROUP BY created_at
+ORDER BY created_at;
+```
+
+#### Count users active each month
+
+```sql
+SELECT  
+      COUNT(DISTINCT(actor.login)) as number_active_users,
+      EXTRACT(MONTH FROM created_at) AS created_at
+
+    FROM `githubarchive.year.2015`
+    
+    WHERE public
+
+GROUP BY created_at
+ORDER BY created_at;
+```
+
+#### Fetch Event data
 
 Github event data is archived nightly [here](http://www.gharchive.org/). [Data](https://bigquery.cloud.google.com/table/githubarchive:day.) are stored in a Google Big Table. The following command run in BigQuery will return count data for all events during the specified period.
 
@@ -77,14 +117,14 @@ After the query finishes, the resulting table must be exported to csv in google 
 
 4. `csvstack events_2018_01_01_2018_06_01* > events_02_02_2018_06_01.csv`
 
-## Merging datasets before reading into Pandas.
+### Merging datasets before reading into Pandas.
 
 Install csvkit for manipulating multiple csv files.
 ```
 sudo pip install csvkit
 ```
 
-## Fetch user data
+### Fetch user data
 
 `Data_fetch.ipynb`
 
@@ -98,7 +138,7 @@ for old in *; do mv $old `basename $old `.csv; done;
 ```
 
 
-## Visualize Random Trees
+### Visualize Random Trees
 [Eurekatrees](https://github.com/ChuckWoodraska/EurekaTrees)
 ```
 pip install eurekatrees
@@ -106,7 +146,7 @@ pip install eurekatrees
 eurekatrees --trees ./trees/rf_tree.txt 
 
 
-## Installing Google Cloud SDK and PySpark on EC2
+### Installing Google Cloud SDK and PySpark on EC2
 
 From [StackOverflow](https://stackoverflow.com/questions/44368263/install-google-cloud-sdk-on-aws-ec2):
 
@@ -119,11 +159,11 @@ From [StackOverflow](https://stackoverflow.com/questions/44368263/install-google
 7. After above steps try running gsutil ls OR bq ls command and see if buckets and datasets are listed properly.
 8. `pip install google-cloud-storage`
 
-## Pyspark on EC2
+### Pyspark on EC2
 
 [Instructions](https://medium.com/@josemarcialportilla/getting-spark-python-and-jupyter-notebook-running-on-amazon-ec2-dec599e1c297)
 
-## Conda virtual env:
+### Conda virtual env:
 
  Install: 
  1. `wget https://repo.continuum.io/archive/Anaconda3-5.0.1-Linux-x86_64.sh`
@@ -135,6 +175,6 @@ From [StackOverflow](https://stackoverflow.com/questions/44368263/install-google
 3. `conda create --name myenv --file spec-file.txt`
 
 
-## Bugs
+### Bugs
 
 [Port already in user](https://stackoverflow.com/questions/34457981/trying-to-run-flask-app-gives-address-already-in-use)
