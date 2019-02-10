@@ -194,9 +194,10 @@ def convert_bigint_to_int(df):
     
     return df
 
-    
+
 def get_merged_data(appName='gh-churn', year='2016', user_year=None):
-    
+    '''
+    '''
     spark = SparkSession.builder.appName(appName).getOrCreate()
     first_period = spark.read.csv('events_data/events_' + year + '_01_01_' + year + '_06_01.csv', 
                                   header = True, inferSchema = True)    

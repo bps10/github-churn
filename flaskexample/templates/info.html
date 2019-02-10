@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+    {% include 'header.html' %}
+</head>
+<body>
+<div class="container">
+
+
+    {% include 'navbar.html' %}
+
+<h3>Motivation</h3>
+<p>
+<a href="https://github.com/open-source">Open source development</a>
+has produced millions of valuable products that are used by engineers around the world. 
+The continued success of these projects, however, depends on a large and active community of 
+developers willing to donate their time.
+</p>
+<p>
+Consider the period between Jan-May 2016. During this time, there were 3.7 million users who had at least one 
+open source event on GitHub. The probelm is that over the next 5 months 48% of those users 
+made zero contributions. The goal of CodeChurn is to monitor and promote the 
+health of the OS community. 
+</p>
+
+<p>
+<b>CodeChurn helps you identify potential churners and suggests actions you can take
+to prevent it from happening.</b>
+</p>
+
+<h3>Tech</h3>
+
+<p>The prediction engine behind CodeChurn was built using data from <a href="https://developer.github.com/v3/users/">
+    GitHub's User api</a> and the publically available <a href="http://www.gharchive.org/">GitHub archive 
+    </a> on Google BigQuery, which contains a record of all events on GitHub. 
+    For more information about the model and how it was implemented
+    visit the CodeChurn <a href="https://github.com/bps10/github-churn">github page </a>.
+</p>
+
+<h3>About</h3>
+<p>This project was developed by <a href="https://www.linkedin.com/in/brian-p-schmidt/">Brian Schmidt </a>
+    as a part of the <a href="https://www.insightdatascience.com/">Insight Data Fellows program</a>.
+</p>
+</div>
+</body>
+</html>

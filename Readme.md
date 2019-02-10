@@ -1,10 +1,25 @@
 # CodeChurn: Keeping open source projects active
 
+## Motivation 
+Open source development has produced of a many valuable products that are used by engineers around the world. The success of these projects, however, depends on a large and active community of developers willing to donate their time. 
+
+To get a sense of the overall health of this community, take for instance, the period between Jan-May 2016. During this time, there were 3.7 million users who had at least one open source event on github. The probelm is that over the next 5 months 48% of those users made zero contributions.
+
+What is needed is a way to monitor and maintain the health of the community. Code Churn is a tool for identifying users who are likely to churn so that stakeholders, such as project leaders, can prevent it before it happens.
 
 
+## Data sources
+
+1. [GitHub User api](https://developer.github.com/v3/) via [github3.py](https://github.com/sigmavirus24/github3.py)
+2. [GitHub Event archive](http://www.gharchive.org/) on [BigQuery](https://bigquery.cloud.google.com/welcome)
 
 ## Tech stack
 
+1. Google cloud api
+2. Pyspark
+3. Pandas
+4. Flask
+5. EC2
 
 ## Notes
 

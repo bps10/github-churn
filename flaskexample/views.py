@@ -76,6 +76,12 @@ def html_table(reponame):
 
 	return all_data
 
+
+@app.route('/info')
+def info():
+	return render_template('info.html')
+
+
 @app.route('/')
 def index():
 	return render_template('index.html', 

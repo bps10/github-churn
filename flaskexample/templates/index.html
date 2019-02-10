@@ -1,49 +1,20 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <!-- Required meta tags -->
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-
-    <!-- Bootstrap CSS -->
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
-    <style>
-
-
-    h2 {
-    fill: none;
-    color: #222;
-    shape-rendering: crispEdges;
-    }
-    h4 {
-    fill: none;
-    color: #222;
-    shape-rendering: crispEdges;
-    }    
-
-    h5 {
-    fill: none;
-    color: #222;
-    shape-rendering: crispEdges;
-    }
-
-    #name {
-    fill: none;
-    color: steelblue;
-    shape-rendering: crispEdges;
-    }
-
-    </style>
+    {% include 'header.html' %}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.3/Chart.min.js"></script>
-
-    <title>GitHub churn</title>
 </head>
-
+<body>
 <div class="container">
-    <div class="jumbotron">
-      <h1>CodeChurn: Keeping open source projects active </h1> 
-      <h4>Discover, engage, contribute.</h4> 
-    </div>
+
+    {% include 'navbar.html' %}
+
+<h4>What is CodeChurn?</h4>
+<p>
+A tool for identifying <a href="https://opensource.com/resources/what-open-source">open source</a>
+contributors on <a href="https://github.com">GitHub</a> who are likely to leave (churn) so that 
+community members can take action to prevent it from happening. Use CodeChurn to keep your project active!
+</p>
 
 <br>
 <div class="row" margin-left="5pt">
@@ -221,3 +192,5 @@
   </div>
 
 </div>
+</body>
+</html>
