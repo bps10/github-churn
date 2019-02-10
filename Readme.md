@@ -1,7 +1,7 @@
 # CodeChurn: Keeping open source projects active
 
 ## Motivation 
-Open source development has produced of a many valuable products that are used by engineers around the world. The success of these projects, however, depends on a large and active community of developers willing to donate their time. 
+Open source development has produced millions of valuable products and tools that are used by engineers around the world. The success of these projects, however, depends on a large and active community of developers willing to donate their time. 
 
 To get a sense of the overall health of this community, take for instance, the period between Jan-May 2016. During this time, there were 3.7 million users who had at least one open source event on github. The probelm is that over the next 5 months 48% of those users made zero contributions.
 
