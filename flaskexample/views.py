@@ -170,6 +170,7 @@ def predict_single_user(data, model, remain_active_flag = False):
 									'prediction']).collect()#[0][1]
 	if prediction[0][1] > 0.5 or remain_active_flag:
 		stay_or_go = 'remain active'
+		print(prediction[0][0])
 		probability = str(round(prediction[0][0][1], 2))
 	else:
 		stay_or_go = 'leave GitHub'
@@ -229,12 +230,12 @@ def pandas_to_spark(usr_data):
 
 def get_predict_suggestions(spark_user, model, has_a_blog, modelName):
 
-	print('=======Predicting 1 =========')	
+	print('=======Predicting 0 =========')	
 	p = {}
 	p = {'WatchEvent_count': None, 'followers_count': None, 'ForkEvent_count': None,
 		'following_count': None, 'IssueComment_Event': None, 'blog': None,}
 	p['nochange'] = {}
-	p['nochange']['stay_or_go'], p['nochange']['probability'] = predict_single_user(spark_user, model)	
+	p['nochange']['stay_or_go'], p['nochange']['probability'] = predict_single_user(spark_user, model, True)	
 	
 	if modelName == 'LMmodelCompany':
 		fields = ['WatchEvent_count', 'followers_count', 'ForkEvent_count']
